@@ -177,7 +177,7 @@
     .toast.visible { transform: translateY(0); opacity: 1; }
     .modal-backdrop { position: fixed; inset: 0; z-index: 30; display: grid; place-items: center; padding: 18px; background: rgb(20 29 24 / 38%); backdrop-filter: blur(3px); }
     .modal-backdrop[hidden] { display: none; }
-    .modal { width: min(100%, 455px); max-height: min(90vh, 700px); overflow-y: auto; padding: 23px; border: 1px solid rgb(255 255 255 / 50%); border-radius: 17px; background: white; box-shadow: 0 24px 80px rgb(15 27 19 / 20%); animation: appear .18s ease-out; }
+    .modal { width: min(100%, 500px); max-height: min(90vh, 700px); overflow-y: auto; padding: 23px; border: 1px solid rgb(255 255 255 / 50%); border-radius: 17px; background: white; box-shadow: 0 24px 80px rgb(15 27 19 / 20%); animation: appear .18s ease-out; }
     .modal-header { display: flex; align-items: start; justify-content: space-between; gap: 12px; margin-bottom: 21px; }
     .modal-header h2 { margin: 0; font-size: 20px; letter-spacing: -.6px; }
     .modal-header p { margin: 5px 0 0; color: var(--muted); font-size: 11px; }
@@ -195,6 +195,14 @@
     .check-field { display: flex; align-items: center; gap: 8px; padding-top: 4px; color: #68736c; font-size: 11px; }
     .check-field input { width: 15px; height: 15px; accent-color: var(--green); }
     .modal-actions { display: flex; justify-content: end; gap: 9px; margin-top: 20px; }
+    .modal-actions .primary-btn { min-width: 155px; }
+    .transaction-extra { grid-column: 1 / -1; border-top: 1px solid var(--line); }
+    .transaction-extra summary { padding: 12px 0 2px; color: #aab3c0; font-size: 11px; font-weight: 640; cursor: pointer; }
+    .transaction-extra[open] summary { margin-bottom: 12px; }
+    .transaction-extra-fields { display: grid; gap: 12px; }
+    .recurring-expense-info { margin: 0; }
+    .recurring-expense-info summary { color: #929dac; font-size: 10px; cursor: pointer; }
+    .recurring-expense-info p { margin: 8px 0 0; color: #85909f; font-size: 10px; line-height: 1.6; }
     .secondary-btn { min-height: 40px; padding: 0 14px; border: 1px solid var(--line); border-radius: 9px; background: white; color: #667169; font-size: 11px; cursor: pointer; }
     .form-error { grid-column: 1 / -1; margin: 0; color: #b64e46; font-size: 11px; }
     .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; clip-path: inset(50%); border: 0; }
@@ -558,6 +566,14 @@
       .transaction-icon { width: 32px; height: 32px; }
       .transaction-tools { opacity: 1; }
       .count-pill { font-size: 9px; }
+      .modal-backdrop { align-items: end; padding: 0; }
+      .modal { width: 100%; max-height: min(88dvh, 720px); padding: 20px 18px calc(14px + env(safe-area-inset-bottom)); border-right: 0; border-bottom: 0; border-left: 0; border-radius: 20px 20px 0 0; }
+      .modal-header { margin-bottom: 15px; }
+      .modal-actions { position: sticky; bottom: calc(-14px - env(safe-area-inset-bottom)); z-index: 2; margin: 17px -18px calc(-14px - env(safe-area-inset-bottom)); padding: 12px 18px calc(14px + env(safe-area-inset-bottom)); border-top: 1px solid var(--line); background: var(--paper); }
+      .modal-actions .secondary-btn, .modal-actions .primary-btn { min-height: 46px; flex: 1; }
+      .field input, .field select { height: 46px; font-size: 16px; }
+      .form-grid { gap: 12px; }
+      .recurring-expense-setup { padding: 12px; }
     }
     @media (max-width: 390px) {
       .main { padding-right: 13px; padding-left: 13px; }
@@ -2244,22 +2260,27 @@
         $("#modal-form").dataset.kind = kind;
         if (kind === "transaction") {
           selectedType = "expense";
-          $("#modal-title").textContent = "Nouvelle opération";
-          $("#modal-subtitle").textContent = "Notez vos mouvements d’argent pour un suivi à jour.";
+          $("#modal-title").textContent = "Ajouter une dépense";
+          $("#modal-subtitle").textContent = "";
           $("#modal-fields").innerHTML = `
             <div class="type-switch"><button class="type-btn" type="button" data-type="expense">Dépense</button><button class="type-btn" type="button" data-type="income">Revenu</button></div>
             <div class="voice-row" id="voice-row">
-              <button class="voice-btn" id="dictate-expense" type="button"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="9" y="3" width="6" height="12" rx="3" stroke="currentColor" stroke-width="1.7"/><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v3m-3 0h6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>Dicter ma dépense</button>
-              <p class="voice-status" id="dictation-status" role="status" aria-live="polite">Décrivez votre achat. La reconnaissance dépend du service vocal de votre navigateur ; vous vérifiez la proposition avant l’enregistrement.</p>
+              <button class="voice-btn" id="dictate-expense" type="button"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="9" y="3" width="6" height="12" rx="3" stroke="currentColor" stroke-width="1.7"/><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v3m-3 0h6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>Dicter</button>
+              <p class="voice-status" id="dictation-status" role="status" aria-live="polite" hidden></p>
             </div>
             <div class="form-grid">
-              <div class="field full"><label for="transaction-amount">Montant (€)</label><input id="transaction-amount" name="amount" type="number" min="0.01" step="0.01" placeholder="0,00" required></div>
+              <div class="field full"><label for="transaction-amount">Montant (€)</label><input id="transaction-amount" name="amount" type="number" min="0.01" step="0.01" inputmode="decimal" placeholder="0,00" required></div>
               <div class="field"><label for="transaction-category">Catégorie</label><select id="transaction-category" name="category" required></select></div>
               <div class="field"><label for="transaction-date">Date</label><input id="transaction-date" name="date" type="date" value="${localDate()}" required></div>
               <select id="transaction-account" name="accountId" required hidden></select>
-              <div class="field full"><label for="transaction-note">Note (facultatif)</label><input id="transaction-note" name="note" maxlength="80" placeholder="Ex. Courses de la semaine"></div>
-              <label class="check-field field full" id="fixed-expense-field"><input name="isFixedExpense" type="checkbox"> Cette dépense correspond à une charge fixe prévue dans mon budget</label>
-              <div class="field full"><button class="purchase-advice-trigger" id="check-purchase" type="button">Aidez-moi à décider avant cet achat</button><div class="purchase-advice" id="purchase-advice" data-state="normal" hidden aria-live="polite"></div></div>
+              <details class="transaction-extra">
+                <summary>Plus d’options</summary>
+                <div class="transaction-extra-fields">
+                  <div class="field"><label for="transaction-note">Note (facultatif)</label><input id="transaction-note" name="note" maxlength="80" placeholder="Ex. Courses"></div>
+                  <label class="check-field field" id="fixed-expense-field"><input name="isFixedExpense" type="checkbox"> Charge fixe</label>
+                  <div class="field"><button class="purchase-advice-trigger" id="check-purchase" type="button">M’aider à décider</button><div class="purchase-advice" id="purchase-advice" data-state="normal" hidden aria-live="polite"></div></div>
+                </div>
+              </details>
               <p class="form-error" id="form-error" hidden></p>
             </div>`;
           $("#transaction-account").innerHTML = state.accounts.map(account => `<option value="${escapeHtml(account.id)}">${escapeHtml(account.name)}${account.isSavings ? " · Épargne" : ""}</option>`).join("");
@@ -2319,31 +2340,31 @@
             ? new Intl.DateTimeFormat("fr-FR", { month: "long", year: "numeric" }).format(new Date(`${monthlyBudget.carriedFrom}-15T12:00:00`))
             : "";
           $("#modal-subtitle").textContent = carriedFrom && !monthlyBudget.confirmed
-            ? `Votre plan a été reconduit depuis ${carriedFrom}. Vérifiez seulement les changements, puis confirmez.`
-            : "Dictez ou ajoutez vos factures mensuelles, puis vérifiez votre enveloppe avant de répartir le reste.";
+            ? `Budget repris de ${carriedFrom}.`
+            : "";
           $("#modal-fields").innerHTML = `<div class="form-grid">
-            <div class="field full"><label for="plan-income">Revenu mensuel net prévu (€)</label><input id="plan-income" name="income" type="number" min="0" step="0.01" placeholder="Ex. 2 100" value="${plan.income || ""}" required></div>
+            <div class="field"><label for="plan-income">Revenu du mois (€)</label><input id="plan-income" name="income" type="number" min="0" step="0.01" inputmode="decimal" placeholder="Ex. 2 100" value="${plan.income || ""}" required></div>
+            <div class="field"><label for="plan-savings">Épargne prévue (€)</label><input id="plan-savings" name="savingsTarget" type="number" min="0" step="0.01" inputmode="decimal" placeholder="Ex. 200" value="${monthlyBudget?.savingsTarget ?? Math.round(plan.income * 0.2)}" required></div>
             <section class="recurring-expense-setup field full" aria-labelledby="recurring-expense-heading">
-              <div class="recurring-expense-heading"><strong id="recurring-expense-heading">Mes charges qui reviennent chaque mois</strong><span>Dès le mois choisi</span></div>
+              <div class="recurring-expense-heading"><strong id="recurring-expense-heading">Charges mensuelles</strong><span>Dès ${new Intl.DateTimeFormat("fr-FR", { month: "short", year: "numeric" }).format(new Date(`${dom.month.value}-15T12:00:00`))}</span></div>
               <div class="recurring-expense-voice">
-                <div class="recurring-expense-actions"><button class="voice-btn" id="dictate-fixed-expenses" type="button"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="9" y="3" width="6" height="12" rx="3" stroke="currentColor" stroke-width="1.7"/><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v3m-3 0h6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>Dicter mes charges</button><button class="recurring-expense-add" id="add-recurring-charge" type="button">+ Ajouter une charge</button></div>
-                <p class="voice-status" id="fixed-expense-dictation-status" role="status" aria-live="polite">Dites chaque nom suivi de son montant : « loyer 800 euros et internet 30 euros ».</p>
+                <div class="recurring-expense-actions"><button class="recurring-expense-add" id="add-recurring-charge" type="button">+ Ajouter une charge</button><button class="voice-btn" id="dictate-fixed-expenses" type="button"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="9" y="3" width="6" height="12" rx="3" stroke="currentColor" stroke-width="1.7"/><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v3m-3 0h6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>Dicter</button></div>
+                <p class="voice-status" id="fixed-expense-dictation-status" role="status" aria-live="polite">Ex. Loyer 800 €, internet 30 €.</p>
               </div>
               <div class="recurring-expense-list" id="recurring-expense-list"></div>
-              <div class="field"><label for="other-fixed-expenses">Autres charges fixes mensuelles (€)</label><input id="other-fixed-expenses" name="fixedExpensesOther" type="number" min="0" step="0.01" inputmode="decimal" value="${fixedExpensesOther}"></div>
+              <div class="field"><label for="other-fixed-expenses">Autres charges (€ / mois)</label><input id="other-fixed-expenses" name="fixedExpensesOther" type="number" min="0" step="0.01" inputmode="decimal" value="${fixedExpensesOther}"></div>
               <div class="recurring-expense-total"><span>Réservé chaque mois <span id="recurring-expense-count"></span></span><strong id="recurring-expense-total">0 €</strong></div>
-              <p class="recurring-expense-note">Ces montants sont réservés dans votre budget chaque mois dès la période indiquée. Clair ne marque pas les factures comme payées : enregistrez chaque paiement séparément et cochez « charge fixe » pour qu’il soit déduit du montant restant.</p>
             </section>
-            <div class="field full"><label for="plan-savings">Somme à mettre de côté ce mois (€)</label><input id="plan-savings" name="savingsTarget" type="number" min="0" step="0.01" placeholder="Ex. 200" value="${monthlyBudget?.savingsTarget ?? Math.round(plan.income * 0.2)}" required></div>
+            <details class="recurring-expense-info field full"><summary>Comment sont comptées les factures ?</summary><p>Les charges sont réservées chaque mois, mais ne sont pas marquées comme payées. Enregistrez leur paiement comme dépense et cochez « Charge fixe » dans ses options.</p></details>
             <details class="category-budget-details field full">
             <summary>Fixer mes limites par type de dépense</summary>
-            <p>Limites facultatives, incluses dans votre enveloppe quotidienne. Par exemple : courses 350 €, loisirs 100 €. Laissez vide si vous préférez recevoir des repères calculés sur vos habitudes.</p>
+            <p>Facultatif. Laissez vide pour utiliser votre enveloppe habituelle.</p>
             <div class="category-budget-fields">${FLEXIBLE_CATEGORIES.map(category => `<div class="field"><label for="category-limit-${category}">${category} · plafond mensuel (€)</label><input id="category-limit-${category}" name="categoryBudget.${category}" type="number" min="0" step="0.01" placeholder="Libre" value="${monthlyBudget?.categoryBudgets?.[category] ?? ""}"></div>`).join("")}</div>
             </details>
             <p class="form-error" id="form-error" hidden></p>
           </div>`;
           renderRecurringCharges();
-          $("#modal-submit").textContent = "Voir mon enveloppe";
+          $("#modal-submit").textContent = "Enregistrer le budget";
         } else if (kind === "annual-target") {
           const year = dom.month.value.slice(0, 4);
           $("#modal-title").textContent = "Mon cap pour l’année";
@@ -2377,6 +2398,10 @@
       }
       function updateTypeButtons() {
         $$("[data-type]", dom.modalFields).forEach(button => button.classList.toggle("active", button.dataset.type === selectedType));
+        if ($("#modal-form").dataset.kind === "transaction") {
+          $("#modal-title").textContent = selectedType === "expense" ? "Ajouter une dépense" : "Ajouter un revenu";
+          $("#modal-submit").textContent = selectedType === "expense" ? "Ajouter la dépense" : "Ajouter le revenu";
+        }
         const voiceRow = $("#voice-row");
         if (voiceRow) voiceRow.hidden = selectedType !== "expense";
         const fixedExpenseField = $("#fixed-expense-field");
@@ -2877,7 +2902,7 @@
               <input class="recurring-expense-amount" type="number" min="0.01" step="0.01" inputmode="decimal" aria-label="Montant mensuel en euros" placeholder="€ / mois" name="chargeAmount.${escapeHtml(charge.id)}" data-recurring-id="${escapeHtml(charge.id)}" data-recurring-field="amount" value="${escapeHtml(String(charge.amount ?? ""))}">
               <button class="recurring-expense-remove" type="button" data-remove-recurring-charge="${escapeHtml(charge.id)}" aria-label="Supprimer ${escapeHtml(charge.name || "cette charge")}">×</button>
             </div>`).join("")
-          : '<p class="recurring-expense-empty">Aucune charge régulière. Dictez-les ou ajoutez-les manuellement.</p>';
+          : '<p class="recurring-expense-empty">Aucune charge.</p>';
         updateRecurringChargesTotal();
       }
       function updateRecurringChargesTotal() {
@@ -2892,7 +2917,7 @@
         if (totalElement) totalElement.textContent = money.format(total);
         const recurringElement = $("#recurring-expense-count");
         const activeCharges = recurringChargesDraft.filter(charge => charge.startMonth <= selectedMonth && (!charge.endMonth || selectedMonth < charge.endMonth));
-        if (recurringElement) recurringElement.textContent = `${money.format(recurringTotal)} prévu${recurringTotal > 0 ? ` · ${activeCharges.length} charge${activeCharges.length > 1 ? "s" : ""}` : ""}`;
+        if (recurringElement) recurringElement.textContent = activeCharges.length ? `· ${activeCharges.length} charge${activeCharges.length > 1 ? "s" : ""}` : "";
       }
       function applyRecurringChargesSpeech(text) {
         const result = parseRecurringChargesSpeech(text);
@@ -2949,6 +2974,7 @@
       }
       function startDictation(button, status, instruction, onTranscript, fallback) {
         const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        status.hidden = false;
         if (!Recognition) {
           status.dataset.state = "error";
           status.textContent = `La dictée vocale n’est pas disponible dans ce navigateur. ${fallback}`;
