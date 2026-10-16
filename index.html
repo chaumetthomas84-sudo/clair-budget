@@ -64,7 +64,9 @@
     .ghost.strong { color: var(--ink); font-weight: 600; }
 
     /* Reste */
-    .summary { padding: 28px 4px 22px; }
+    .spaces { width: fit-content; margin-top: 8px; }
+    .spaces button { padding: 6px 16px; font-size: 14px; }
+    .summary { padding: 20px 4px 22px; }
     .summary-label { color: var(--muted); font-size: 14px; }
     .summary-value { margin-top: 2px; font-size: 44px; font-weight: 650; letter-spacing: -1.5px; font-variant-numeric: tabular-nums; }
     .summary-value.neg { color: var(--minus); }
@@ -162,6 +164,11 @@
       <input type="file" id="import-file" accept=".csv,text/csv,text/plain" hidden>
       <input type="file" id="restore-file" accept=".json,application/json" hidden>
     </header>
+
+    <div class="switch spaces" id="space-switch" role="group" aria-label="Compte">
+      <button type="button" data-type="perso">Perso</button>
+      <button type="button" data-type="commun">Commun</button>
+    </div>
 
     <section class="summary" aria-live="polite">
       <div class="summary-label">Reste</div>
@@ -305,8 +312,12 @@
   (() => {
     "use strict";
 
-    const KEY = "clair-v2";
-    const OLD_KEYS = ["clair-finances-v1-personal", "clair-finances-v1"];
+    // Deux comptes séparés, chacun avec ses propres opérations, fixes et solde.
+    const SPACES = {
+      perso: { key: "clair-v2", old: ["clair-finances-v1-personal", "clair-finances-v1"] },
+      commun: { key: "clair-v2-commun", old: ["clair-finances-v1-joint"] }
+    };
+    const SPACE_KEY = "clair-v2-espace";
     const CATS = [
       ["Courses", "🛒"], ["Resto", "☕"], ["Transport", "🚗"], ["Maison", "🏠"],
       ["Loisirs", "🎈"], ["Santé", "💊"], ["Shopping", "🛍️"], ["Autre", "•"]
@@ -331,16 +342,17 @@
     const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 
     // ---------- Données ----------
-    function load() {
+    const isState = d => d && Array.isArray(d.ops) && Array.isArray(d.fixed);
+    function load(sp) {
       try {
-        const saved = JSON.parse(localStorage.getItem(KEY));
-        if (saved && Array.isArray(saved.ops) && Array.isArray(saved.fixed)) return { skipped: [], ...saved };
+        const saved = JSON.parse(localStorage.getItem(SPACES[sp].key));
+        if (isState(saved)) return { skipped: [], ...saved };
       } catch {}
-      return migrate() ?? { ops: [], fixed: [], skipped: [] };
+      return migrate(SPACES[sp].old) ?? { ops: [], fixed: [], skipped: [] };
     }
-    function migrate() {
+    function migrate(oldKeys) {
       let old = null;
-      for (const k of OLD_KEYS) { try { old = JSON.parse(localStorage.getItem(k)); } catch {} if (old) break; }
+      for (const k of oldKeys) { try { old = JSON.parse(localStorage.getItem(k)); } catch {} if (old) break; }
       if (!old || !Array.isArray(old.transactions)) return null;
       const ops = old.transactions
         .filter(t => t && /^\d{4}-\d{2}-\d{2}$/.test(t.date) && Number(t.amount) > 0 && t.category !== "Virement interne")
@@ -355,11 +367,13 @@
       return { ops, fixed, skipped: [] };
     }
     function save() {
-      try { localStorage.setItem(KEY, JSON.stringify(state)); }
+      try { localStorage.setItem(SPACES[space].key, JSON.stringify(state)); }
       catch { toast("Enregistrement impossible"); }
     }
 
-    let state = load();
+    let space = "perso";
+    try { if (SPACES[localStorage.getItem(SPACE_KEY)]) space = localStorage.getItem(SPACE_KEY); } catch {}
+    let state = load(space);
     const today = isoDay(new Date());
     const thisMonth = isoMonth(new Date());
     let month = thisMonth;
@@ -586,6 +600,22 @@
       render();
     });
 
+    // ---------- Comptes perso / commun ----------
+    const spaceSwitch = setupSwitch("space-switch", sp => {
+      if (sp === space) return;
+      save();
+      space = sp;
+      try { localStorage.setItem(SPACE_KEY, sp); } catch {}
+      state = load(space);
+      applyAllFixed();
+      save();
+      filter = "";
+      month = thisMonth;
+      spaceSwitch(space);
+      render();
+    });
+    spaceSwitch(space);
+
     // ---------- Événements ----------
     $("prev").addEventListener("click", () => { month = shiftMonth(month, -1); filter = ""; render(); });
     $("next").addEventListener("click", () => { month = shiftMonth(month, 1); filter = ""; render(); });
@@ -686,7 +716,8 @@
       render();
     });
     $("backup").addEventListener("click", async () => {
-      const content = JSON.stringify({ app: "clair", version: 2, exportedAt: new Date().toISOString(), data: state });
+      const spaces = Object.fromEntries(Object.keys(SPACES).map(sp => [sp, sp === space ? state : load(sp)]));
+      const content = JSON.stringify({ app: "clair", version: 3, exportedAt: new Date().toISOString(), spaces });
       const name = `clair-sauvegarde-${today}.json`;
       const file = new File([content], name, { type: "application/json" });
       try {
@@ -709,6 +740,7 @@
       toast("Sauvegardé");
     });
 
+    const SPACE_NAMES = { perso: "Perso", commun: "Commun" };
     let pendingRestore = null;
     $("restore").addEventListener("click", () => $("restore-file").click());
     $("restore-file").addEventListener("change", async e => {
@@ -717,11 +749,14 @@
       if (!file) return;
       try {
         const parsed = JSON.parse(await file.text());
-        const data = parsed?.data ?? parsed;
-        if (!Array.isArray(data?.ops) || !Array.isArray(data?.fixed)) throw new Error();
-        pendingRestore = { skipped: [], ...data };
+        // Sauvegarde des deux comptes, ou ancienne sauvegarde d'un seul compte (restaurée dans le compte ouvert).
+        const spaces = parsed?.spaces && Object.keys(SPACES).every(sp => isState(parsed.spaces[sp])) ? parsed.spaces
+          : isState(parsed?.data ?? parsed) ? { [space]: parsed.data ?? parsed } : null;
+        if (!spaces) throw new Error();
+        pendingRestore = Object.fromEntries(Object.entries(spaces).map(([sp, d]) => [sp, { skipped: [], ...d }]));
         const when = parsed.exportedAt ? ` du ${shortDate(parsed.exportedAt.slice(0, 10))}` : "";
-        $("restore-text").innerHTML = `Sauvegarde${when} : <b>${data.ops.length} opérations</b>, ${data.fixed.length} fixes.<br><span>Elle remplacera tes données actuelles (${state.ops.length} opérations).</span>`;
+        const lines = Object.entries(pendingRestore).map(([sp, d]) => `${SPACE_NAMES[sp]} : <b>${d.ops.length} opérations</b>, ${d.fixed.length} fixes`).join("<br>");
+        $("restore-text").innerHTML = `Sauvegarde${when}<br>${lines}<br><span>Elle remplacera les données actuelles de ${Object.keys(pendingRestore).length > 1 ? "tes deux comptes" : "ce compte"}.</span>`;
         open("restore-backdrop");
       } catch {
         toast("Fichier non reconnu");
@@ -730,9 +765,17 @@
     $("restore-confirm").addEventListener("click", () => {
       if (!pendingRestore) return;
       // Les données remplacées restent gardées à part, au cas où.
-      try { localStorage.setItem(`${KEY}-avant-restauration`, JSON.stringify(state)); } catch {}
-      state = pendingRestore;
+      save();
+      try {
+        for (const sp of Object.keys(pendingRestore)) {
+          const key = SPACES[sp].key;
+          const current = localStorage.getItem(key);
+          if (current) localStorage.setItem(`${key}-avant-restauration`, current);
+          localStorage.setItem(key, JSON.stringify(pendingRestore[sp]));
+        }
+      } catch { toast("Restauration impossible"); return; }
       pendingRestore = null;
+      state = load(space);
       applyAllFixed();
       save();
       close("restore-backdrop");
