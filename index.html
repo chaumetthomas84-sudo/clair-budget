@@ -58,7 +58,8 @@
     /* En-tête */
     .top { display: flex; align-items: center; justify-content: space-between; gap: 8px; height: 44px; }
     .month { display: flex; align-items: center; gap: 2px; }
-    .month-name { min-width: 128px; text-align: center; font-weight: 600; text-transform: capitalize; }
+    .month-name { min-width: 128px; text-align: center; font-weight: 600; white-space: nowrap; }
+    .month-name::first-letter { text-transform: uppercase; }
     .ghost { border: 0; background: transparent; padding: 8px 10px; border-radius: 10px; color: var(--muted); }
     .ghost:hover { background: var(--soft); color: var(--ink); }
     .ghost.strong { color: var(--ink); font-weight: 600; }
@@ -73,7 +74,6 @@
     .summary-day { margin-top: 2px; font-size: 15px; }
     .summary-line { display: flex; gap: 18px; margin-top: 14px; color: var(--muted); font-size: 14px; font-variant-numeric: tabular-nums; }
     .summary-line b { color: var(--ink); font-weight: 600; }
-    .summary-line .later { color: var(--plus); font-size: 13px; }
 
     /* Catégories */
     .cats { display: flex; gap: 8px; margin: 0 -16px 8px; padding: 0 16px 4px; overflow-x: auto; scrollbar-width: none; }
@@ -178,7 +178,7 @@
       <div class="summary-value" id="left"></div>
       <div class="summary-day" id="per-day"></div>
       <div class="summary-line">
-        <span>Entrées <b id="total-in"></b> <small class="later" id="later-in"></small></span>
+        <span>Entrées <b id="total-in"></b></span>
         <span>Sorties <b id="total-out"></b></span>
       </div>
       <div class="plan" id="plan"></div>
@@ -277,6 +277,10 @@
       <label class="setting">
         <span>Réserve de sécurité<small>Gardée de côté, jamais comptée pour vivre.</small></span>
         <input class="field small" id="reserve" inputmode="decimal" placeholder="0 €">
+      </label>
+      <label class="setting">
+        <span>Mois budgétaire<small>Commence le jour de la paie.</small></span>
+        <input class="field small" id="period-day" inputmode="numeric" placeholder="27">
       </label>
       <div class="rows menu">
         <button class="row" type="button" id="open-import"><span class="row-text">Importer un relevé de la banque</span><span class="row-sub">CSV</span></button>
@@ -384,12 +388,24 @@
     let state = load(space);
     const today = isoDay(new Date());
     const thisMonth = isoMonth(new Date());
-    let month = thisMonth;
+
+    // Mois budgétaire : de paie à paie (par défaut du 27 au 26). La clé "AAAA-MM" désigne le mois où il commence.
+    const periodDay = () => state.settings?.periodDay || 27;
+    function periodOf(key) {
+      const d = periodDay();
+      return { start: M.fixedDate(key, d), end: M.addDays(M.fixedDate(shiftMonth(key, 1), d), -1) };
+    }
+    function periodKeyOf(date) {
+      const key = date.slice(0, 7);
+      return date < M.fixedDate(key, periodDay()) ? shiftMonth(key, -1) : key;
+    }
+    const currentKey = () => periodKeyOf(today);
+    let month = currentKey();
     let filter = "";
 
-    // Les fixes sont posés automatiquement sur chaque mois jusqu'au mois en cours.
+    // Les fixes sont posés automatiquement sur chaque mois, jusqu'à la fin du mois budgétaire en cours.
     function applyFixed(m) {
-      if (m > thisMonth) return false;
+      if (m > periodOf(currentKey()).end.slice(0, 7)) return false;
       let changed = false;
       for (const f of state.fixed) {
         if (f.from > m || state.skipped.includes(`${f.id}|${m}`)) continue;
@@ -403,7 +419,8 @@
     function applyAllFixed() {
       let changed = false;
       for (const f of state.fixed) {
-        for (let m = f.from; m <= thisMonth; m = shiftMonth(m, 1)) changed = applyFixed(m) || changed;
+        const limit = periodOf(currentKey()).end.slice(0, 7);
+        for (let m = f.from; m <= limit; m = shiftMonth(m, 1)) changed = applyFixed(m) || changed;
       }
       if (changed) save();
     }
@@ -411,25 +428,26 @@
     // ---------- Affichage ----------
     function render() {
       const [y, mo] = month.split("-").map(Number);
-      $("month-name").textContent = new Date(y, mo - 1, 1).toLocaleDateString("fr-FR", { month: "long", ...(y !== new Date().getFullYear() && { year: "numeric" }) });
+      const { start, end } = periodOf(month);
+      $("month-name").textContent = periodDay() === 1
+        ? new Date(y, mo - 1, 1).toLocaleDateString("fr-FR", { month: "long", ...(y !== new Date().getFullYear() && { year: "numeric" }) })
+        : `${shortDate(start)} – ${shortDate(end)}`;
 
-      const ops = state.ops.filter(o => o.date.startsWith(month));
+      const ops = state.ops.filter(o => o.date >= start && o.date <= end);
       const sum = list => list.reduce((s, o) => s + M.cents(o.amount), 0);
       // Prudence : une entrée ne compte qu'à partir de sa date ; les sorties prévues du mois comptent déjà.
       const totalIn = sum(ops.filter(o => o.type === "income" && o.date <= today));
-      const laterIn = sum(ops.filter(o => o.type === "income" && o.date > today));
       const totalOut = sum(ops.filter(o => o.type === "expense"));
       const left = totalIn - totalOut;
 
       $("left").textContent = fmtC(left);
       $("left").classList.toggle("neg", left < 0);
       $("total-in").textContent = fmtC(totalIn);
-      $("later-in").textContent = laterIn ? `+${fmtC(laterIn)} à venir` : "";
       $("total-out").textContent = fmtC(totalOut);
 
       // Sans solde vérifié, simple repère du mois ; avec, c'est la prévision jusqu'à la paie qui fait foi.
-      if (month === thisMonth && left > 0 && !state.balance) {
-        const daysLeft = daysIn(month) - new Date().getDate() + 1;
+      if (month === currentKey() && left > 0 && !state.balance) {
+        const daysLeft = M.daysBetween(today, end) + 1;
         $("per-day").textContent = `${euroRound.format(Math.floor(left / daysLeft / 100))} par jour · ${daysLeft} j restants`;
       } else {
         $("per-day").textContent = "";
@@ -521,7 +539,7 @@
       opCats.set(op?.cat || "Courses");
       $("op-amount").value = op ? String(op.amount).replace(".", ",") : "";
       $("op-label").value = op?.label || "";
-      $("op-date").value = op?.date || (month === thisMonth ? today : `${month}-01`);
+      $("op-date").value = op?.date || (month === currentKey() ? today : periodOf(month).start);
       $("op-delete").hidden = !op;
       updateCheck();
       open("op-backdrop");
@@ -545,7 +563,7 @@
       }
       save();
       close("op-backdrop");
-      month = date.slice(0, 7);
+      month = periodKeyOf(date);
       render();
     });
     $("op-delete").addEventListener("click", () => {
@@ -636,7 +654,7 @@
       applyAllFixed();
       save();
       filter = "";
-      month = thisMonth;
+      month = currentKey();
       spaceSwitch(space);
       render();
     });
@@ -731,9 +749,19 @@
     // ---------- Réglages et sauvegarde ----------
     function renderSettings() {
       $("reserve").value = reserve() ? String(reserve()).replace(".", ",") : "";
+      $("period-day").value = periodDay();
       $("backup-info").textContent = state.lastBackup ? `dernière : ${shortDate(state.lastBackup)}` : "jamais faite";
     }
     $("open-settings").addEventListener("click", () => { renderSettings(); open("settings-backdrop"); });
+    $("period-day").addEventListener("change", () => {
+      const d = parseInt($("period-day").value, 10);
+      if (!(d >= 1 && d <= 31)) { toast("Jour entre 1 et 31"); renderSettings(); return; }
+      state.settings = { ...state.settings, periodDay: d };
+      applyAllFixed();
+      save();
+      month = currentKey();
+      render();
+    });
     $("reserve").addEventListener("change", () => {
       const v = $("reserve").value.trim() ? parseAmount($("reserve").value) : 0;
       if (v === null) { toast("Montant ?"); renderSettings(); return; }
@@ -806,7 +834,7 @@
       save();
       close("restore-backdrop");
       close("settings-backdrop");
-      month = thisMonth;
+      month = currentKey();
       render();
       toast("Restauré");
     });
@@ -924,7 +952,7 @@
       pendingImport = [];
       save();
       close("import-backdrop");
-      if (last) month = last.slice(0, 7);
+      if (last) month = periodKeyOf(last);
       render();
     });
 
