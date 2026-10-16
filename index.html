@@ -73,6 +73,7 @@
     .summary-day { margin-top: 2px; font-size: 15px; }
     .summary-line { display: flex; gap: 18px; margin-top: 14px; color: var(--muted); font-size: 14px; font-variant-numeric: tabular-nums; }
     .summary-line b { color: var(--ink); font-weight: 600; }
+    .summary-line .later { color: var(--plus); font-size: 13px; }
 
     /* Catégories */
     .cats { display: flex; gap: 8px; margin: 0 -16px 8px; padding: 0 16px 4px; overflow-x: auto; scrollbar-width: none; }
@@ -177,7 +178,7 @@
       <div class="summary-value" id="left"></div>
       <div class="summary-day" id="per-day"></div>
       <div class="summary-line">
-        <span>Entrées <b id="total-in"></b></span>
+        <span>Entrées <b id="total-in"></b> <small class="later" id="later-in"></small></span>
         <span>Sorties <b id="total-out"></b></span>
       </div>
       <div class="plan" id="plan"></div>
@@ -413,13 +414,17 @@
       $("month-name").textContent = new Date(y, mo - 1, 1).toLocaleDateString("fr-FR", { month: "long", ...(y !== new Date().getFullYear() && { year: "numeric" }) });
 
       const ops = state.ops.filter(o => o.date.startsWith(month));
-      const sum = type => ops.filter(o => o.type === type).reduce((s, o) => s + M.cents(o.amount), 0);
-      const totalIn = sum("income"), totalOut = sum("expense");
+      const sum = list => list.reduce((s, o) => s + M.cents(o.amount), 0);
+      // Prudence : une entrée ne compte qu'à partir de sa date ; les sorties prévues du mois comptent déjà.
+      const totalIn = sum(ops.filter(o => o.type === "income" && o.date <= today));
+      const laterIn = sum(ops.filter(o => o.type === "income" && o.date > today));
+      const totalOut = sum(ops.filter(o => o.type === "expense"));
       const left = totalIn - totalOut;
 
       $("left").textContent = fmtC(left);
       $("left").classList.toggle("neg", left < 0);
       $("total-in").textContent = fmtC(totalIn);
+      $("later-in").textContent = laterIn ? `+${fmtC(laterIn)} à venir` : "";
       $("total-out").textContent = fmtC(totalOut);
 
       // Sans solde vérifié, simple repère du mois ; avec, c'est la prévision jusqu'à la paie qui fait foi.
