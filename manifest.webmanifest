@@ -1,16 +1,16 @@
 {
   "id": "./",
-  "name": "Clair — mon budget personnel",
+  "name": "Clair",
   "short_name": "Clair",
-  "description": "Préparez votre budget mensuel, suivez votre année et avancez vers votre épargne.",
+  "description": "Mes dépenses du mois.",
   "lang": "fr-FR",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
   "display_override": ["standalone", "minimal-ui"],
   "orientation": "portrait-primary",
-  "background_color": "#101318",
-  "theme_color": "#101318",
+  "background_color": "#f6f6f4",
+  "theme_color": "#f6f6f4",
   "icons": [
     {
       "src": "./icon-192.png",

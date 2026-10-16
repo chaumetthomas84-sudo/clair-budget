@@ -1,6 +1,6 @@
 "use strict";
 
-const CACHE_NAME = "clair-app-v19";
+const CACHE_NAME = "clair-app-v21";
 const APP_SHELL = [
   "./",
   "./index.html",
