@@ -110,6 +110,8 @@
     .sheet-title { font-weight: 600; }
     .switch { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px; border-radius: 12px; background: var(--soft); }
     .switch button { padding: 8px; border: 0; border-radius: 9px; background: transparent; color: var(--muted); }
+    .switch[hidden] { display: none; }
+    .repeat { margin-top: 12px; }
     .switch button[aria-pressed="true"] { background: var(--surface); color: var(--ink); font-weight: 600; box-shadow: 0 1px 3px rgb(0 0 0 / 8%); }
     .amount-input { display: block; width: 100%; margin: 18px 0 10px; padding: 0; border: 0; outline: 0; background: transparent; font-size: 42px; font-weight: 650; letter-spacing: -1px; text-align: center; font-variant-numeric: tabular-nums; }
     .amount-input::placeholder { color: var(--line); }
@@ -202,6 +204,11 @@
       <input class="field" id="op-label" placeholder="Libellé (facultatif)" maxlength="60" aria-label="Libellé">
       <div class="pick" id="op-cats"></div>
       <input class="field" id="op-date" type="date" aria-label="Date">
+      <div class="switch repeat" id="op-repeat" role="group" aria-label="Fréquence">
+        <button type="button" data-type="once">Une fois</button>
+        <button type="button" data-type="monthly">Chaque mois</button>
+      </div>
+      <p class="hint" id="op-fixed-hint" hidden>Revient chaque mois. Pour changer ou arrêter : Fixes.</p>
       <div class="actions">
         <button class="btn light" type="button" id="op-delete" hidden>Supprimer</button>
         <button class="btn" type="submit">Enregistrer</button>
@@ -494,9 +501,15 @@
     let opEdit = null, opType = "expense";
     const opCats = setupPick("op-cats");
     const opSwitch = setupSwitch("op-type", t => { opType = t; opSwitch(t); opCats.show(t === "expense"); });
+    let opRepeat = "once";
+    const repeatSwitch = setupSwitch("op-repeat", t => { opRepeat = t; repeatSwitch(t); });
 
     function openOp(op) {
       opEdit = op || null;
+      opRepeat = "once";
+      repeatSwitch("once");
+      $("op-repeat").hidden = !!op?.fixedId;
+      $("op-fixed-hint").hidden = !op?.fixedId;
       opType = op?.type || "expense";
       opSwitch(opType);
       opCats.show(opType === "expense");
@@ -515,8 +528,16 @@
       if (!amount) { $("op-amount").focus(); toast("Montant ?"); return; }
       const date = $("op-date").value || today;
       const data = { type: opType, amount, label: $("op-label").value.trim(), cat: opType === "expense" ? opCats.get() || "Autre" : "", date };
-      if (opEdit) Object.assign(opEdit, data);
-      else state.ops.push({ id: uid(), created: Date.now(), ...data });
+      const target = opEdit ? Object.assign(opEdit, data) : { id: uid(), created: Date.now(), ...data };
+      if (!opEdit) state.ops.push(target);
+      // « Chaque mois » : l'opération devient un fixe, reposé automatiquement les mois suivants au même jour.
+      if (opRepeat === "monthly" && !target.fixedId) {
+        const fixed = { id: uid(), type: data.type, amount, label: data.label || (data.type === "income" ? "Entrée" : data.cat), day: Number(date.slice(8, 10)), cat: data.cat, from: date.slice(0, 7) };
+        state.fixed.push(fixed);
+        target.fixedId = fixed.id;
+        applyAllFixed();
+        toast("Ajouté chaque mois");
+      }
       save();
       close("op-backdrop");
       month = date.slice(0, 7);
