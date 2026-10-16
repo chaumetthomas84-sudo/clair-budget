@@ -126,11 +126,20 @@
     .add-line { width: 100%; margin-top: 10px; padding: 14px; border: 1px dashed var(--line); border-radius: 14px; background: transparent; color: var(--muted); }
     .label-row { display: flex; gap: 8px; }
     .label-row .field:last-child { flex: 0 0 96px; text-align: center; }
-    .balance { display: flex; width: 100%; align-items: center; justify-content: space-between; gap: 12px; margin-top: 16px; padding: 13px 14px; border: 0; border-radius: 14px; background: var(--surface); text-align: left; }
-    .balance span { color: var(--muted); font-size: 14px; }
-    .balance small { display: block; color: var(--muted); font-size: 12px; }
-    .balance b { font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
-    .balance b.neg { color: var(--minus); }
+    .plan { overflow: hidden; margin-top: 16px; border-radius: 14px; background: var(--surface); }
+    .plan-row { display: flex; width: 100%; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 14px; border: 0; border-top: 1px solid var(--line); background: transparent; text-align: left; }
+    .plan-row:first-child { border-top: 0; }
+    button.plan-row:active { background: var(--soft); }
+    .plan-row > span { font-size: 15px; }
+    .plan-row small { display: block; color: var(--muted); font-size: 12px; }
+    .plan-row b { display: block; font-weight: 600; font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+    .plan-row .value small { text-align: right; }
+    .plan-row .neg, .check.neg { color: var(--minus); }
+    .check { min-height: 20px; margin: -4px 0 6px; color: var(--muted); font-size: 14px; text-align: center; }
+    .setting { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; padding: 12px 14px; border-radius: 14px; background: var(--surface); }
+    .setting small { display: block; color: var(--muted); font-size: 12px; }
+    .field.small { width: 110px; height: 42px; margin: 0; text-align: right; }
+    .menu .row { justify-content: space-between; }
     .import-text { margin: 4px 4px 0; line-height: 1.6; }
     .import-text span { color: var(--muted); }
     .toast { position: fixed; left: 50%; bottom: calc(96px + env(safe-area-inset-bottom)); z-index: 20; padding: 10px 16px; transform: translateX(-50%); border-radius: 999px; background: var(--accent); color: var(--on-accent); font-size: 14px; opacity: 0; pointer-events: none; transition: opacity .2s; }
@@ -147,10 +156,11 @@
         <button class="ghost" id="next" type="button" aria-label="Mois suivant">›</button>
       </div>
       <div>
-        <button class="ghost" id="open-import" type="button">Relevé</button>
         <button class="ghost strong" id="open-fixed" type="button">Fixes</button>
+        <button class="ghost strong" id="open-settings" type="button" aria-label="Réglages et sauvegarde">⋯</button>
       </div>
       <input type="file" id="import-file" accept=".csv,text/csv,text/plain" hidden>
+      <input type="file" id="restore-file" accept=".json,application/json" hidden>
     </header>
 
     <section class="summary" aria-live="polite">
@@ -161,7 +171,7 @@
         <span>Entrées <b id="total-in"></b></span>
         <span>Sorties <b id="total-out"></b></span>
       </div>
-      <button class="balance" id="balance" type="button"></button>
+      <div class="plan" id="plan"></div>
     </section>
 
     <div class="cats" id="cats"></div>
@@ -181,6 +191,7 @@
         <span style="width:70px"></span>
       </div>
       <input class="amount-input" id="op-amount" inputmode="decimal" placeholder="0 €" aria-label="Montant">
+      <p class="check" id="op-check" aria-live="polite"></p>
       <input class="field" id="op-label" placeholder="Libellé (facultatif)" maxlength="60" aria-label="Libellé">
       <div class="pick" id="op-cats"></div>
       <input class="field" id="op-date" type="date" aria-label="Date">
@@ -242,6 +253,38 @@
     </form>
   </div>
 
+  <div class="backdrop" id="settings-backdrop" hidden>
+    <div class="sheet">
+      <div class="sheet-head">
+        <span class="sheet-title">Réglages</span>
+        <button class="ghost strong" type="button" data-close>OK</button>
+      </div>
+      <label class="setting">
+        <span>Réserve de sécurité<small>Gardée de côté, jamais comptée pour vivre.</small></span>
+        <input class="field small" id="reserve" inputmode="decimal" placeholder="0 €">
+      </label>
+      <div class="rows menu">
+        <button class="row" type="button" id="open-import"><span class="row-text">Importer un relevé de la banque</span><span class="row-sub">CSV</span></button>
+        <button class="row" type="button" id="backup"><span class="row-text">Sauvegarder mes données<div class="row-sub" id="backup-info"></div></span><span class="row-sub">›</span></button>
+        <button class="row" type="button" id="restore"><span class="row-text">Restaurer une sauvegarde</span><span class="row-sub">›</span></button>
+      </div>
+      <p class="hint">Tes données sont uniquement dans ce navigateur, sur cet appareil. Rien n’est envoyé ailleurs. Sauvegarde de temps en temps pour ne rien perdre.</p>
+    </div>
+  </div>
+
+  <div class="backdrop" id="restore-backdrop" hidden>
+    <div class="sheet">
+      <div class="sheet-head">
+        <span class="sheet-title">Restaurer</span>
+        <button class="ghost" type="button" data-close>Annuler</button>
+      </div>
+      <p class="import-text" id="restore-text"></p>
+      <div class="actions">
+        <button class="btn" type="button" id="restore-confirm">Remplacer mes données</button>
+      </div>
+    </div>
+  </div>
+
   <div class="backdrop" id="import-backdrop" hidden>
     <div class="sheet">
       <div class="sheet-head">
@@ -257,6 +300,7 @@
 
   <div class="toast" id="toast" role="status"></div>
 
+  <script src="./moteur.js"></script>
   <script>
   (() => {
     "use strict";
@@ -274,6 +318,9 @@
     const euro = new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR" });
     const euroRound = new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: 0 });
     const fmt = n => euro.format(n).replace(",00", "");
+    const M = window.Moteur;
+    const fmtC = c => fmt(c / 100);
+    const floorEuro = c => Math.floor(c / 100) * 100;
     const uid = () => crypto.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`;
     const pad = n => String(n).padStart(2, "0");
     const isoDay = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -345,23 +392,24 @@
       $("month-name").textContent = new Date(y, mo - 1, 1).toLocaleDateString("fr-FR", { month: "long", ...(y !== new Date().getFullYear() && { year: "numeric" }) });
 
       const ops = state.ops.filter(o => o.date.startsWith(month));
-      const totalIn = ops.filter(o => o.type === "income").reduce((s, o) => s + o.amount, 0);
-      const totalOut = ops.filter(o => o.type === "expense").reduce((s, o) => s + o.amount, 0);
+      const sum = type => ops.filter(o => o.type === type).reduce((s, o) => s + M.cents(o.amount), 0);
+      const totalIn = sum("income"), totalOut = sum("expense");
       const left = totalIn - totalOut;
 
-      $("left").textContent = fmt(left);
+      $("left").textContent = fmtC(left);
       $("left").classList.toggle("neg", left < 0);
-      $("total-in").textContent = fmt(totalIn);
-      $("total-out").textContent = fmt(totalOut);
+      $("total-in").textContent = fmtC(totalIn);
+      $("total-out").textContent = fmtC(totalOut);
 
-      if (month === thisMonth && left > 0) {
+      // Sans solde vérifié, simple repère du mois ; avec, c'est la prévision jusqu'à la paie qui fait foi.
+      if (month === thisMonth && left > 0 && !state.balance) {
         const daysLeft = daysIn(month) - new Date().getDate() + 1;
-        $("per-day").textContent = `${euroRound.format(Math.floor(left / daysLeft))} par jour · ${daysLeft} j restants`;
+        $("per-day").textContent = `${euroRound.format(Math.floor(left / daysLeft / 100))} par jour · ${daysLeft} j restants`;
       } else {
         $("per-day").textContent = "";
       }
 
-      renderBalance();
+      renderPlan();
 
       // Catégories
       const byCat = {};
@@ -443,6 +491,7 @@
       $("op-label").value = op?.label || "";
       $("op-date").value = op?.date || (month === thisMonth ? today : `${month}-01`);
       $("op-delete").hidden = !op;
+      updateCheck();
       open("op-backdrop");
       if (!op) setTimeout(() => $("op-amount").focus(), 60);
     }
@@ -558,30 +607,44 @@
       render();
     });
 
-    // ---------- Solde du compte ----------
-    // Solde saisi + opérations passées depuis ce jour-là (le jour même : seulement celles ajoutées après la saisie).
-    function currentBalance() {
-      const b = state.balance;
-      if (!b) return null;
-      return state.ops.reduce((sum, o) => {
-        if (o.date > today) return sum;
-        const after = o.date > b.date || (o.date === b.date && (o.created || 0) > b.at);
-        return after ? sum + (o.type === "income" ? o.amount : -o.amount) : sum;
-      }, b.amount);
-    }
-    function renderBalance() {
-      const value = currentBalance();
-      if (value === null) {
-        $("balance").innerHTML = `<span>Sur le compte</span><span>Indiquer ›</span>`;
+    // ---------- Solde et prévision ----------
+    const reserve = () => state.settings?.reserve || 0;
+    const getForecast = () => M.forecast(state, today, { reserve: reserve() });
+    const shortDate = iso => new Date(`${iso}T12:00:00`).toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
+    const dayName = iso => iso === today ? "aujourd’hui" : iso === M.addDays(today, 1) ? "demain" : `le ${shortDate(iso)}`;
+    const planRow = (label, value, opts = {}) =>
+      `<${opts.button ? 'button type="button" id="' + opts.button + '"' : "div"} class="plan-row"><span>${label}${opts.sub ? `<small>${opts.sub}</small>` : ""}</span>` +
+      `<span class="value"><b class="${opts.neg ? "neg" : ""}">${value}</b>${opts.valueSub ? `<small class="${opts.neg ? "neg" : ""}">${opts.valueSub}</small>` : ""}</span></${opts.button ? "button" : "div"}>`;
+
+    function renderPlan() {
+      const fc = getForecast();
+      if (fc.balance === null) {
+        $("plan").innerHTML = planRow("Sur le compte", "Indiquer ›", { button: "balance", sub: "Pour voir jusqu’à ta paie" });
         return;
       }
-      const d = new Date(`${state.balance.date}T12:00:00`);
-      const when = state.balance.date === today ? "aujourd’hui" : `le ${d.toLocaleDateString("fr-FR", { day: "numeric", month: "short" })}`;
-      $("balance").innerHTML = `<span>Sur le compte<small>vérifié ${when}</small></span><b class="${value < 0 ? "neg" : ""}">${fmt(value)}</b>`;
+      const rows = [planRow("Sur le compte", fmtC(fc.balance), { button: "balance", neg: fc.balance < 0, sub: `vérifié ${dayName(state.balance.date)}` })];
+
+      const until = fc.pay ? `Jusqu’à la paie · ${fc.days} j` : `Jusqu’à la fin du mois · ${fc.days} j`;
+      const untilSub = [fc.pay ? `${fc.pay.label} ${dayName(fc.pay.date)}` : "", fc.reserve ? `réserve ${fmtC(fc.reserve)} gardée` : ""].filter(Boolean).join(" · ");
+      rows.push(fc.available > 0
+        ? planRow(until, `${fmtC(fc.available)} pour vivre`, { sub: untilSub, valueSub: `${fmtC(floorEuro(fc.perDay))} par jour` })
+        : planRow(until, "0 € pour vivre", { sub: untilSub, neg: true, valueSub: `il manque ${fmtC(-fc.available)}` }));
+
+      const outs = fc.events.filter(e => e.cents < 0);
+      if (outs.length) rows.push(planRow("À payer d’ici là", fmtC(fc.toPay), { sub: `prochain : ${esc(outs[0].label || "dépense")} ${dayName(outs[0].date)}` }));
+
+      if (fc.overdraft) {
+        rows.push(planRow("Découvert prévu", fmtC(fc.overdraft.cents), { neg: true, sub: `${dayName(fc.overdraft.date)}${fc.overdraft.label ? " · après " + esc(fc.overdraft.label) : ""}` }));
+      } else if (outs.length) {
+        rows.push(planRow("Point le plus bas", fmtC(fc.low.cents), { sub: `${dayName(fc.low.date)}, avant tes dépenses courantes` }));
+      }
+      if (fc.savings > 0) rows.push(planRow("Épargne possible", `≈ ${fmtC(fc.savings)}`, { sub: "estimée sur tes dépenses habituelles" }));
+      $("plan").innerHTML = rows.join("");
     }
-    $("balance").addEventListener("click", () => {
-      const value = currentBalance();
-      $("balance-amount").value = value === null ? "" : String(Math.round(value * 100) / 100).replace(".", ",");
+    $("plan").addEventListener("click", e => {
+      if (!e.target.closest("#balance")) return;
+      const value = M.balanceNow(state, today);
+      $("balance-amount").value = value === null ? "" : String(value / 100).replace(".", ",");
       open("balance-backdrop");
       setTimeout(() => { $("balance-amount").focus(); $("balance-amount").select(); }, 60);
     });
@@ -593,6 +656,90 @@
       save();
       close("balance-backdrop");
       render();
+    });
+
+    // « Est-ce que je peux dépenser ça ? », pendant la saisie d'une nouvelle dépense du jour.
+    function updateCheck() {
+      const el = $("op-check");
+      const amount = parseAmount($("op-amount").value);
+      const date = $("op-date").value || today;
+      const fc = !opEdit && opType === "expense" && amount && date <= today && date >= (state.balance?.date || "") ? getForecast() : null;
+      const r = fc && M.canSpend(fc, M.cents(amount));
+      el.classList.toggle("neg", !!r && !r.ok);
+      el.textContent = !r ? "" : r.ok ? `Ensuite : ${fmtC(r.after)} pour vivre · ${fmtC(floorEuro(r.perDay))}/jour` : `Il manquera ${fmtC(-r.after)} d’ici ${fc.pay ? "la paie" : "la fin du mois"}`;
+    }
+    $("op-amount").addEventListener("input", updateCheck);
+    $("op-date").addEventListener("change", updateCheck);
+    $("op-type").addEventListener("click", () => setTimeout(updateCheck));
+
+    // ---------- Réglages et sauvegarde ----------
+    function renderSettings() {
+      $("reserve").value = reserve() ? String(reserve()).replace(".", ",") : "";
+      $("backup-info").textContent = state.lastBackup ? `dernière : ${shortDate(state.lastBackup)}` : "jamais faite";
+    }
+    $("open-settings").addEventListener("click", () => { renderSettings(); open("settings-backdrop"); });
+    $("reserve").addEventListener("change", () => {
+      const v = $("reserve").value.trim() ? parseAmount($("reserve").value) : 0;
+      if (v === null) { toast("Montant ?"); renderSettings(); return; }
+      state.settings = { ...state.settings, reserve: v };
+      save();
+      render();
+    });
+    $("backup").addEventListener("click", async () => {
+      const content = JSON.stringify({ app: "clair", version: 2, exportedAt: new Date().toISOString(), data: state });
+      const name = `clair-sauvegarde-${today}.json`;
+      const file = new File([content], name, { type: "application/json" });
+      try {
+        if (navigator.canShare?.({ files: [file] })) await navigator.share({ files: [file], title: name });
+        else {
+          const a = document.createElement("a");
+          a.href = URL.createObjectURL(file);
+          a.download = name;
+          a.click();
+          setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+        }
+      } catch (err) {
+        if (err.name === "AbortError") return;
+        toast("Sauvegarde impossible");
+        return;
+      }
+      state.lastBackup = today;
+      save();
+      renderSettings();
+      toast("Sauvegardé");
+    });
+
+    let pendingRestore = null;
+    $("restore").addEventListener("click", () => $("restore-file").click());
+    $("restore-file").addEventListener("change", async e => {
+      const file = e.target.files[0];
+      e.target.value = "";
+      if (!file) return;
+      try {
+        const parsed = JSON.parse(await file.text());
+        const data = parsed?.data ?? parsed;
+        if (!Array.isArray(data?.ops) || !Array.isArray(data?.fixed)) throw new Error();
+        pendingRestore = { skipped: [], ...data };
+        const when = parsed.exportedAt ? ` du ${shortDate(parsed.exportedAt.slice(0, 10))}` : "";
+        $("restore-text").innerHTML = `Sauvegarde${when} : <b>${data.ops.length} opérations</b>, ${data.fixed.length} fixes.<br><span>Elle remplacera tes données actuelles (${state.ops.length} opérations).</span>`;
+        open("restore-backdrop");
+      } catch {
+        toast("Fichier non reconnu");
+      }
+    });
+    $("restore-confirm").addEventListener("click", () => {
+      if (!pendingRestore) return;
+      // Les données remplacées restent gardées à part, au cas où.
+      try { localStorage.setItem(`${KEY}-avant-restauration`, JSON.stringify(state)); } catch {}
+      state = pendingRestore;
+      pendingRestore = null;
+      applyAllFixed();
+      save();
+      close("restore-backdrop");
+      close("settings-backdrop");
+      month = thisMonth;
+      render();
+      toast("Restauré");
     });
 
     // ---------- Relevé CSV ----------
@@ -723,6 +870,7 @@
     applyAllFixed();
     save();
     render();
+    navigator.storage?.persist?.().catch(() => {});
 
     if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
       navigator.serviceWorker.register("./service-worker.js").catch(() => {});
