@@ -77,7 +77,8 @@
     const reserve = cents(options.reserve || 0);
     const balance = balanceNow(state, today);
     const pay = nextPay(state, today);
-    const end = pay ? pay.date : lastDayOf(today.slice(0, 7));
+    // Sans paie connue : jusqu'à la fin du mois budgétaire (fournie par l'appli), sinon fin du mois civil.
+    const end = pay ? pay.date : options.end && options.end >= today ? options.end : lastDayOf(today.slice(0, 7));
     // Jours à vivre : jusqu'à la veille de la paie, ou jusqu'à la fin du mois inclus.
     const days = Math.max(1, pay ? daysBetween(today, end) : daysBetween(today, end) + 1);
     const events = upcoming(state, today, end).filter(e => !(pay && e.fixedId === pay.fixedId && e.date === pay.date));
@@ -96,7 +97,9 @@
     }
     if (balance < 0 && !overdraft) overdraft = { cents: balance, date: today, label: "" };
 
-    const available = balance + toReceive - toPay - reserve;
+    // Ce qu'on peut dépenser sans passer sous zéro à aucun moment d'ici la paie :
+    // une rentrée d'argent ne compte qu'à partir du jour où elle arrive.
+    const available = low.cents - reserve;
     result.available = available;
     result.perDay = available > 0 ? Math.floor(available / days) : 0;
     result.low = low;
