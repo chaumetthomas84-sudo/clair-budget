@@ -323,7 +323,7 @@
         <button class="row" type="button" id="backup"><span class="row-text">Sauvegarder mes données<div class="row-sub" id="backup-info"></div></span><span class="row-sub">›</span></button>
         <button class="row" type="button" id="restore"><span class="row-text">Restaurer une sauvegarde<div class="row-sub">ou ajouter un fichier de dépenses fixes</div></span><span class="row-sub">›</span></button>
       </div>
-      <p class="hint" style="text-align:center">Version 35</p>
+      <p class="hint" style="text-align:center">Version 36</p>
       <p class="hint">Tes données sont uniquement dans ce navigateur, sur cet appareil. Rien n’est envoyé ailleurs. Sauvegarde de temps en temps pour ne rien perdre.</p>
     </div>
   </div>
@@ -992,7 +992,7 @@
       ["Shopping", /amazon|amzn|fnac|darty|boulanger|zara|h&m|kiabi|decathlon|cdiscount|vinted|primark|sephora|chausse|stradivarius|nutripure|nutrition|\baction\b/]
     ];
     // Mouvements d'épargne et de prêt : ni dépenses ni revenus.
-    const INTERNAL = /livret|gc re plum|\bldd|sur le (ce|l\.?a)\b|versement periodique|\bde cote\b|remuneration nette|amortissement pret|mise a disposition pret|remboursement anticipe/;
+    const INTERNAL = /livret|gc re plum|\bldd|sur le (ce|l\.?a)(?![a-z])|versement periodique|\bde cote\b|remuneration nette|amortissement pret|mise a disposition pret|remboursement anticipe/;
     const guessCat = text => (RULES.find(([, re]) => re.test(norm(text))) || ["Autre"])[0];
     const decodeHtml = s => s.replace(/&amp;/g, "&").replace(/&([a-z])(acute|grave|circ|uml);/gi, "$1");
 
