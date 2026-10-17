@@ -323,7 +323,7 @@
         <button class="row" type="button" id="backup"><span class="row-text">Sauvegarder mes données<div class="row-sub" id="backup-info"></div></span><span class="row-sub">›</span></button>
         <button class="row" type="button" id="restore"><span class="row-text">Restaurer une sauvegarde<div class="row-sub">ou ajouter un fichier de dépenses fixes</div></span><span class="row-sub">›</span></button>
       </div>
-      <p class="hint" style="text-align:center">Version 36</p>
+      <p class="hint" style="text-align:center">Version 37</p>
       <p class="hint">Tes données sont uniquement dans ce navigateur, sur cet appareil. Rien n’est envoyé ailleurs. Sauvegarde de temps en temps pour ne rien perdre.</p>
     </div>
   </div>
@@ -887,6 +887,129 @@
 
     const SPACE_NAMES = { perso: "Perso", commun: "Commun" };
     let pendingRestore = null, pendingFixes = null;
+    // ---------- Fixes : ajout ou synchronisation (fichier ou lien) ----------
+    const cleanFix = f => ({ type: f.type === "income" ? "income" : "expense", label: String(f.label).slice(0, 60), amount: Math.round(Number(f.amount) * 100) / 100,
+      day: Math.min(31, Math.max(1, parseInt(f.day, 10) || 1)), cat: f.type === "income" ? "" : (ICON[f.cat] ? f.cat : "Autre") });
+    // Rapprochement en trois passes : même nom, puis même jour et montant proche, puis un mot commun et montant comparable.
+    const PASSES = [
+      (a, b) => norm(a.label) === norm(b.label),
+      (a, b) => (a.day || 1) === b.day && Math.abs(a.amount - b.amount) <= b.amount * 0.1,
+      (a, b) => sameWord(a.label, b.label) && Math.abs(a.amount - b.amount) <= b.amount * 0.5
+    ];
+    function planFor(sp, fixes, sync) {
+      const current = sp === space ? state : load(sp);
+      const free = [...current.fixed];
+      const matched = new Map();
+      for (const pass of PASSES) {
+        for (const f of fixes) {
+          if (matched.has(f)) continue;
+          const idx = free.findIndex(o => o.type === f.type && pass(o, f));
+          if (idx >= 0) matched.set(f, free.splice(idx, 1)[0]);
+        }
+      }
+      const plan = { space: sp, add: [], update: [], remove: [] };
+      for (const f of fixes) {
+        const old = matched.get(f);
+        if (!old) { plan.add.push(f); continue; }
+        if (old.label !== f.label || old.amount !== f.amount || (old.day || 1) !== f.day || (old.cat || "") !== f.cat) plan.update.push({ id: old.id, from: old, to: f });
+      }
+      if (sync) plan.remove = free;
+      return plan;
+    }
+    function previewFixes(parsed) {
+      const sets = Array.isArray(parsed.sets) ? parsed.sets : [{ space: parsed.space, fixes: parsed.fixes }];
+      const plans = sets.map(set => {
+        const fixes = (Array.isArray(set.fixes) ? set.fixes : []).filter(f => f && f.label && Number(f.amount) > 0).map(cleanFix);
+        return planFor(SPACES[set.space] ? set.space : space, fixes, parsed.sync === true);
+      }).filter(Boolean);
+      if (!plans.length) throw new Error("vide");
+      pendingFixes = plans;
+      const money = f => `${f.type === "income" ? "+" : "−"}${fmt(f.amount)}`;
+      const list = items => items.map(t => `· ${esc(t)}`).join("<br>");
+      $("restore-text").innerHTML = plans.map(pl => {
+        const parts = [`<b>Compte ${SPACE_NAMES[pl.space]}</b>`];
+        if (pl.add.length) parts.push(`Ajoutés :<br>${list(pl.add.map(f => `${f.label} ${money(f)} le ${f.day}`))}`);
+        if (pl.update.length) parts.push(`Corrigés :<br>${list(pl.update.map(u => `${u.to.label} : ${fmt(u.from.amount)} → ${money(u.to)} le ${u.to.day}`))}`);
+        if (pl.remove.length) parts.push(`Retirés :<br>${list(pl.remove.map(f => `${f.label} ${money(f)}`))}`);
+        if (!pl.add.length && !pl.update.length && !pl.remove.length) parts.push("<span>Déjà à jour.</span>");
+        return parts.join("<br>");
+      }).join("<br><br>") + "<br><br><span>Les opérations passées ne sont pas touchées.</span>";
+      $("restore-confirm").textContent = "Valider";
+      open("restore-backdrop");
+    }
+    function applyFixes() {
+      const plans = pendingFixes;
+      pendingFixes = null;
+      save();
+      const first = space;
+      let changes = 0;
+      for (const pl of plans) {
+        space = pl.space;
+        state = load(space);
+        // Corrigés : le fixe et ses opérations à venir (non importées) prennent les nouveaux chiffres.
+        for (const u of pl.update) {
+          const f = state.fixed.find(x => x.id === u.id);
+          if (!f) continue;
+          Object.assign(f, u.to);
+          for (const o of state.ops) {
+            if (o.fixedId !== f.id || o.imported || o.date < today) continue;
+            Object.assign(o, { type: f.type, amount: f.amount, label: f.label, cat: f.cat, date: `${o.date.slice(0, 7)}-${pad(Math.min(f.day, daysIn(o.date.slice(0, 7))))}` });
+          }
+          changes++;
+        }
+        // Retirés : le fixe disparaît, ses opérations à venir aussi ; le passé reste tel quel.
+        for (const r of pl.remove) {
+          state.fixed = state.fixed.filter(x => x.id !== r.id);
+          state.ops = state.ops.filter(o => !(o.fixedId === r.id && !o.imported && o.date >= today));
+          changes++;
+        }
+        // Ajoutés : rien d'inventé dans le passé, le relevé fait foi.
+        const newIds = new Set();
+        for (const f of pl.add) {
+          const id = uid();
+          newIds.add(id);
+          state.fixed.push({ id, from: thisMonth, ...f });
+          changes++;
+        }
+        applyAllFixed();
+        const pastLimit = state.balance?.date > today ? state.balance.date : today;
+        state.ops = state.ops.filter(o => {
+          if (!newIds.has(o.fixedId) || o.imported || o.date >= pastLimit) return true;
+          state.skipped.push(`${o.fixedId}|${o.date.slice(0, 7)}`);
+          return false;
+        });
+        save();
+      }
+      space = plans.some(pl => pl.space === first) ? first : plans[0].space;
+      try { localStorage.setItem(SPACE_KEY, space); } catch {}
+      state = load(space);
+      close("restore-backdrop");
+      close("settings-backdrop");
+      spaceSwitch(space);
+      month = currentKey();
+      render();
+      toast(changes ? "Fixes mis à jour" : "Déjà à jour");
+    }
+    // Lien « #fixes=… » : les données restent dans le lien (jamais envoyées au site).
+    async function fixesFromLink() {
+      const m = location.hash.match(/^#(fixes|fixz)=(.+)$/);
+      if (!m) return;
+      history.replaceState(null, "", location.pathname + location.search);
+      try {
+        const b64 = m[2].replace(/-/g, "+").replace(/_/g, "/");
+        const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+        // « fixz » : contenu compressé (lien plus court, QR code lisible).
+        const text = m[1] === "fixz"
+          ? await new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream("gzip"))).text()
+          : new TextDecoder().decode(bytes);
+        const parsed = JSON.parse(text);
+        if (parsed?.kind !== "fixes") throw new Error();
+        previewFixes(parsed);
+      } catch {
+        toast("Lien non reconnu");
+      }
+    }
+
     $("restore").addEventListener("click", () => $("restore-file").click());
     $("restore-file").addEventListener("change", async e => {
       const file = e.target.files[0];
@@ -895,19 +1018,7 @@
       try {
         const parsed = JSON.parse(await file.text());
         pendingFixes = null;
-        if (parsed?.kind === "fixes" && Array.isArray(parsed.fixes)) {
-          const target = SPACES[parsed.space] ? parsed.space : space;
-          const fixes = parsed.fixes.filter(f => f && f.label && Number(f.amount) > 0)
-            .map(f => ({ type: f.type === "income" ? "income" : "expense", label: String(f.label).slice(0, 60), amount: Math.round(Number(f.amount) * 100) / 100, day: Math.min(31, Math.max(1, parseInt(f.day, 10) || 1)), cat: f.type === "income" ? "" : (ICON[f.cat] ? f.cat : "Autre") }));
-          if (!fixes.length) throw new Error();
-          pendingFixes = { space: target, fixes };
-          const total = fixes.filter(f => f.type === "expense").reduce((t, f) => t + M.cents(f.amount), 0);
-          const totalIn = fixes.filter(f => f.type === "income").reduce((t, f) => t + M.cents(f.amount), 0);
-          $("restore-text").innerHTML = `<b>${fixes.length} fixes</b> pour le compte <b>${SPACE_NAMES[target]}</b><br>Sorties ≈ ${fmtC(total)} par mois${totalIn ? ` · entrées ≈ ${fmtC(totalIn)}` : ""}<br><span>Elles s’ajoutent à ce qui existe déjà : rien n’est effacé.</span>`;
-          $("restore-confirm").textContent = "Ajouter";
-          open("restore-backdrop");
-          return;
-        }
+        if (parsed?.kind === "fixes") { previewFixes(parsed); return; }
         $("restore-confirm").textContent = "Remplacer mes données";
         // Sauvegarde des deux comptes, ou ancienne sauvegarde d'un seul compte (restaurée dans le compte ouvert).
         const spaces = parsed?.spaces && Object.keys(SPACES).every(sp => isState(parsed.spaces[sp])) ? parsed.spaces
@@ -923,40 +1034,7 @@
       }
     });
     $("restore-confirm").addEventListener("click", () => {
-      if (pendingFixes) {
-        const { space: target, fixes } = pendingFixes;
-        pendingFixes = null;
-        if (target !== space) {
-          save();
-          space = target;
-          try { localStorage.setItem(SPACE_KEY, space); } catch {}
-          state = load(space);
-        }
-        const known = new Set(state.fixed.map(f => norm(f.label)));
-        const newIds = new Set();
-        for (const f of fixes) {
-          if (known.has(norm(f.label))) continue;
-          const id = uid();
-          newIds.add(id);
-          state.fixed.push({ id, from: thisMonth, ...f });
-        }
-        const added = newIds.size;
-        applyAllFixed();
-        const pastLimit = state.balance?.date > today ? state.balance.date : today;
-        state.ops = state.ops.filter(o => {
-          if (!newIds.has(o.fixedId) || o.imported || o.date >= pastLimit) return true;
-          state.skipped.push(`${o.fixedId}|${o.date.slice(0, 7)}`);
-          return false;
-        });
-        save();
-        close("restore-backdrop");
-        close("settings-backdrop");
-        spaceSwitch(space);
-        month = currentKey();
-        render();
-        toast(added ? `${added} fixes ajoutés` : "Déjà tous présents");
-        return;
-      }
+      if (pendingFixes) { applyFixes(); return; }
       if (!pendingRestore) return;
       // Les données remplacées restent gardées à part, au cas où.
       save();
@@ -1160,6 +1238,7 @@
     save();
     render();
     navigator.storage?.persist?.().catch(() => {});
+    fixesFromLink();
 
     // Mises à jour : on vérifie à l'ouverture et à chaque retour dans l'appli ; une nouvelle version recharge la page.
     if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
