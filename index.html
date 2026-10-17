@@ -332,7 +332,7 @@
     const SPACE_KEY = "clair-v2-espace";
     const CATS = [
       ["Courses", "🛒"], ["Resto", "☕"], ["Transport", "🚗"], ["Maison", "🏠"],
-      ["Loisirs", "🎈"], ["Santé", "💊"], ["Shopping", "🛍️"], ["Autre", "•"]
+      ["Loisirs", "🎈"], ["Santé", "💊"], ["Shopping", "🛍️"], ["Virement", "🔁"], ["Autre", "•"]
     ];
     const ICON = Object.fromEntries(CATS);
     const OLD_CAT = { Logement: "Maison", Restaurants: "Resto", Carburant: "Transport", Transport: "Transport", Courses: "Courses", Loisirs: "Loisirs", Santé: "Santé", Shopping: "Shopping", Abonnements: "Maison" };
@@ -842,16 +842,19 @@
     // ---------- Relevé CSV ----------
     const norm = s => String(s).toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/\s+/g, " ").trim();
     const RULES = [
-      ["Resto", /uber ?eats|deliveroo|just ?eat|mcdo|mc donald|burger|kfc|restau|brasserie|pizz|boulangerie|patiss|cafe|sushi|kebab/],
-      ["Courses", /carrefour|leclerc|auchan|lidl|aldi|intermarche|super ?u|hyper ?u|monoprix|franprix|casino|netto|grand frais|picard|biocoop|leader price|spar|proxi|market/],
-      ["Transport", /total(?! ?energ)|esso|\bbp\b|shell|avia|station|carbur|sncf|ratp|navigo|tcl|uber|bolt|blablacar|peage|autoroute|vinci|sanef|aprr|parking|indigo/],
-      ["Santé", /pharma|medecin|docteur|dentist|kine|opticien|laborat|hopital|clinique|ameli|cpam|mutuelle/],
-      ["Loisirs", /netflix|spotify|deezer|disney|canal|prime video|cinema|pathe|gaumont|ugc|steam|playstation|xbox|nintendo|fnac spectacle|ticketmaster|sport|salle/],
-      ["Maison", /loyer|edf|engie|total ?energ|veolia|eau |saur|free|orange|sfr|bouygues|sosh|red by|assurance|maif|macif|matmut|axa|ikea|leroy|castorama|brico/],
-      ["Shopping", /amazon|fnac|darty|boulanger|zara|h&m|kiabi|decathlon|cdiscount|vinted|primark|sephora|\baction\b/]
+      ["Virement", /vir(t|ement)?( sepa)?( inst(antane)?)? (emis|recu)|cpte a cpte|wero/],
+      ["Transport", /station|carbur|total(?! ?energ)|esso|\bbp\b|shell|avia|petro|sncf|ratp|navigo|uber(?! ?eats)|bolt|blablacar|peage|autoroute|cofiroute|vinci|sanef|aprr|\basf\b|parking|indigo|norauto|oscaro|carte grise|autocontrole|auto net|washalo/],
+      ["Resto", /uber ?eats|deliveroo|just ?eat|mc ?do|mac ?do|mc donald|burger|\bbk\b|kfc|restau|brasserie|pizz|boulangerie|banette|fournil|patiss|cafe|starbucks|sushi|kebab|snack|piadineria|mie caline|marie blachere|columbus|forestine|arbre des sav|chez melanie/],
+      ["Courses", /carrefour|leclerc|auchan|lidl|aldi|intermarche|itm |super ?u|hyper ?u|u express|monoprix|franprix|casino|netto|grand frais|picard|biocoop|grimodis|jow|coop|market|u expre|uep\*dac/],
+      ["Santé", /pharma|phie |medecin|docteur|doctolib|dentist|kine|opticien|laborat|hopital|clinique|radio|ameli|cpam/],
+      ["Maison", /loyer|location|edf|engie|total ?energ|soregies|veolia|eaux? de|saur|free|orange|sfr|bouygues|sosh|assurance|mutuelle|maif|macif|matmut|axa|amv|ikea|leroy|castorama|brico|point p|jardinerie|gammvert|pisci|creche|pret|oney|personal finance|pronoe|sapeurs pompiers|aripa/],
+      ["Loisirs", /netflix|spotify|deezer|disney|canal|prime video|google one|cinema|pathe|gaumont|ugc|steam|playstation|xbox|nintendo|microsoft|futuroscope|fdj|ticketmaster|sport|superlama|adlpartner|google play|google \*|wl\*google|openai|chatgpt|anthropic|base44|ionos|ovhcloud|getqr/],
+      ["Shopping", /amazon|amzn|fnac|darty|boulanger|zara|h&m|kiabi|decathlon|cdiscount|vinted|primark|sephora|chausse|stradivarius|nutripure|nutrition|\baction\b/]
     ];
-    const INTERNAL = /livret|ldds|\bpel\b|epargne|vir(ement)? (interne|permanent vers)|vers compte|de compte a compte/;
-    const guessCat = label => (RULES.find(([, re]) => re.test(norm(label))) || ["Autre"])[0];
+    // Mouvements d'épargne et de prêt : ni dépenses ni revenus.
+    const INTERNAL = /livret|gc re plum|\bldd|sur le (ce|l\.?a)\b|versement periodique|\bde cote\b|remuneration nette|amortissement pret|mise a disposition pret|remboursement anticipe/;
+    const guessCat = text => (RULES.find(([, re]) => re.test(norm(text))) || ["Autre"])[0];
+    const decodeHtml = s => s.replace(/&amp;/g, "&").replace(/&([a-z])(acute|grave|circ|uml);/gi, "$1");
 
     function splitLine(line, sep) {
       const out = []; let cur = "", quoted = false;
@@ -865,54 +868,86 @@
       return out;
     }
     function parseDate(v) {
-      let m = v.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{2,4})/);
+      let m = String(v).match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{2,4})$/);
       if (m) { const y = m[3].length === 2 ? "20" + m[3] : m[3]; return `${y}-${pad(m[2])}-${pad(m[1])}`; }
-      m = v.match(/^(\d{4})-(\d{2})-(\d{2})/);
+      m = String(v).match(/^(\d{4})-(\d{2})-(\d{2})/);
       return m ? `${m[1]}-${m[2]}-${m[3]}` : null;
     }
     function parseNumber(v) {
       if (!v) return null;
-      let s = v.replace(/[\s €+]/g, "");
+      let s = String(v).replace(/[\s €+]/g, "");
+      if (!/^-?[\d.,]+$/.test(s)) return null;
       if (/,\d{1,2}$/.test(s)) s = s.replace(/\./g, "").replace(",", ".");
       else s = s.replace(/,/g, "");
       const n = Number(s);
-      return Number.isFinite(n) && n !== 0 ? n : null;
+      return Number.isFinite(n) ? n : null;
     }
-    // « CB CARREFOUR MARKET 14/10 » → « Carrefour Market »
+    // « FACTURE CARTE DU 180925 LECLERC JARDRES CARTE 4609XXXX7446 » → « Leclerc Jardres »
+    // « VIR SEPA RECU /DE SDIS VIENNE /MOTIF PAYE… » → « Sdis Vienne »
     function cleanLabel(raw) {
-      const s = raw.replace(/\s+/g, " ").trim()
-        .replace(/^(paiement par carte|carte|cb|prlv( sepa)?|prelevement( sepa)?|vir(ement)?( sepa)?( recu| emis| instantane)?|retrait( dab)?|dab)\b[\s:]*/i, "")
+      let s = raw.replace(/\s+/g, " ").trim();
+      const part = re => (s.match(re) || [])[1]?.trim();
+      if (/\/(de|motif|ben) /i.test(s)) {
+        const from = part(/\/de ([^/]+)/i), motif = part(/\/motif ([^/]+)/i), ben = part(/\/ben ([^/]+)/i);
+        s = (/recu/i.test(s) ? from || motif : motif || ben || from) || s;
+      }
+      s = s.replace(/^(facture carte( du \d{6})?|paiement par carte|carte|cb|prlv( sepa)?|prelevement( sepa)?|virt?( sepa)?( cpte a cpte)?( inst)?( recu| emis)?|retrait( dab)?|dab|rembourst cb du \d{6})\b[\s:]*/i, "")
+        .replace(/\s+carte\s+\d{4}.*$/i, "")
+        .replace(/\s+(ech|ref|mdt|id|refdo|refben)[\s:./].*$/i, "")
+        .replace(/\bwero\b|\b[0-9a-f]{20,}\b/gi, "")
         .replace(/\s*\b\d{2}\/\d{2}(\/\d{2,4})?\b.*$/, "")
-        .replace(/\s+(ech|ref|mdt|id)[\s:.].*$/i, "")
-        .trim() || raw.trim();
+        .replace(/\s+/g, " ").trim();
+      if (!s) s = raw.trim();
       return (s === s.toUpperCase() ? s.toLowerCase().replace(/(^|[\s'-])\p{L}/gu, c => c.toUpperCase()) : s).slice(0, 60);
     }
+
     function parseCsv(text) {
       const lines = text.replace(/^﻿/, "").split(/\r?\n/).filter(l => l.trim());
       const sep = [";", "\t", ","].map(s => [s, lines.slice(0, 15).reduce((n, l) => n + l.split(s).length, 0)]).sort((a, b) => b[1] - a[1])[0][0];
+      const result = { rows: [], account: "", balance: null };
+
       const headIndex = lines.findIndex(l => { const h = norm(l); return h.includes("date") && /montant|debit|credit/.test(h); });
-      if (headIndex < 0) return null;
-      const head = splitLine(lines[headIndex], sep).map(norm);
-      const col = re => head.findIndex(h => re.test(h));
-      const cDate = col(/^date( d.?operation| operation)?$/) >= 0 ? col(/^date( d.?operation| operation)?$/) : col(/date/);
-      const cLabel = [/libelle operation/, /^libelle$/, /libelle/, /description|intitule/].map(col).find(i => i >= 0) ?? -1;
-      const cAmount = col(/montant/), cDebit = col(/debit/), cCredit = col(/credit/);
-      if (cDate < 0 || (cAmount < 0 && cDebit < 0)) return null;
-      const rows = [];
-      for (const line of lines.slice(headIndex + 1)) {
-        const cells = splitLine(line, sep);
-        const date = parseDate(cells[cDate] || "");
-        if (!date) continue;
-        let n = cAmount >= 0 ? parseNumber(cells[cAmount]) : null;
-        if (n === null && cDebit >= 0) { const d = parseNumber(cells[cDebit]); const c = cCredit >= 0 ? parseNumber(cells[cCredit]) : null; n = d ? -Math.abs(d) : c ? Math.abs(c) : null; }
-        if (n === null) continue;
-        const label = cleanLabel(cells[cLabel] || "");
-        rows.push({ date, type: n < 0 ? "expense" : "income", amount: Math.round(Math.abs(n) * 100) / 100, label });
+      if (headIndex >= 0) {
+        // Format avec ligne de titres (Date ; Libellé ; Montant…).
+        const head = splitLine(lines[headIndex], sep).map(norm);
+        const col = re => head.findIndex(h => re.test(h));
+        const cDate = col(/^date( d.?operation| operation)?$/) >= 0 ? col(/^date( d.?operation| operation)?$/) : col(/date/);
+        const cLabel = [/libelle operation/, /^libelle$/, /libelle/, /description|intitule/].map(col).find(i => i >= 0) ?? -1;
+        const cAmount = col(/montant/), cDebit = col(/debit/), cCredit = col(/credit/);
+        if (cDate < 0 || (cAmount < 0 && cDebit < 0)) return result;
+        for (const line of lines.slice(headIndex + 1)) {
+          const cells = splitLine(line, sep);
+          const date = parseDate(cells[cDate] || "");
+          if (!date) continue;
+          let n = cAmount >= 0 ? parseNumber(cells[cAmount]) : null;
+          if (!n && cDebit >= 0) { const d = parseNumber(cells[cDebit]); const c = cCredit >= 0 ? parseNumber(cells[cCredit]) : null; n = d ? -Math.abs(d) : c ? Math.abs(c) : null; }
+          if (!n) continue;
+          result.rows.push({ date, amount: n, raw: cells[cLabel] || "", text: cells.join(" ") });
+        }
+        return result;
       }
-      return rows;
+
+      // Format sans titres (Hello bank!) : 1re ligne = compte ; … ; date ; ; solde, puis date ; type ; type ; libellé ; montant.
+      const first = splitLine(lines[0] || "", sep);
+      if (!parseDate(first[0])) {
+        const d = first.map(parseDate).find(Boolean);
+        const bal = parseNumber(first.at(-1));
+        result.account = decodeHtml(first[0] || "");
+        if (d && bal !== null) result.balance = { date: d, amount: bal };
+      }
+      for (const line of lines) {
+        const cells = splitLine(line, sep);
+        const date = parseDate(cells[0]);
+        const n = parseNumber(cells.at(-1));
+        if (!date || !n) continue;
+        const middle = cells.slice(1, -1);
+        const raw = middle.reduce((a, b) => (b.length > a.length ? b : a), "");
+        result.rows.push({ date, amount: n, raw, text: middle.join(" ") });
+      }
+      return result;
     }
 
-    let pendingImport = [];
+    let pendingImport = [], pendingBalance = null;
     $("open-import").addEventListener("click", () => $("import-file").click());
     $("import-file").addEventListener("change", async e => {
       const file = e.target.files[0];
@@ -921,38 +956,55 @@
       const buf = await file.arrayBuffer();
       let text = new TextDecoder("utf-8").decode(buf);
       if (text.includes("�")) text = new TextDecoder("windows-1252").decode(buf);
-      const rows = parseCsv(text);
-      if (!rows || !rows.length) { toast("Fichier non reconnu"); return; }
+      const parsed = parseCsv(text);
+      const where = space === "commun" ? "Commun" : "Perso";
+      pendingImport = []; pendingBalance = null;
+
+      if (/livret|pret|epargne/.test(norm(parsed.account))) {
+        $("import-text").innerHTML = `<b>${esc(parsed.account)}</b><br><span>C’est un livret ou un prêt : pas besoin de l’importer. Importe le relevé de ton compte courant.</span>`;
+        $("import-confirm").hidden = true;
+        open("import-backdrop");
+        return;
+      }
+      if (!parsed.rows.length) { toast("Fichier non reconnu"); return; }
 
       // Une opération déjà présente (même sens, même montant, date proche, ou fixe du même mois) n'est pas ajoutée.
       const used = new Set();
       let dup = 0, internal = 0;
-      pendingImport = [];
-      for (const r of rows) {
-        if (INTERNAL.test(norm(r.label))) { internal++; continue; }
+      for (const r of parsed.rows) {
+        if (INTERNAL.test(norm(r.text))) { internal++; continue; }
+        const type = r.amount < 0 ? "expense" : "income";
+        const amount = Math.round(Math.abs(r.amount) * 100) / 100;
         const t = new Date(`${r.date}T12:00:00`).getTime();
-        const match = state.ops.find(o => !used.has(o) && o.type === r.type && Math.abs(o.amount - r.amount) < 0.005 &&
+        const match = state.ops.find(o => !used.has(o) && o.type === type && Math.abs(o.amount - amount) < 0.005 &&
           (Math.abs(new Date(`${o.date}T12:00:00`).getTime() - t) <= 3 * 864e5 || (o.fixedId && o.date.slice(0, 7) === r.date.slice(0, 7))));
         if (match) { used.add(match); dup++; continue; }
-        pendingImport.push({ id: uid(), ...r, cat: r.type === "expense" ? guessCat(r.label) : "", imported: true });
+        pendingImport.push({ id: uid(), date: r.date, type, amount, label: cleanLabel(r.raw), cat: type === "expense" ? guessCat(r.text) : "", imported: true });
       }
+      // Le solde indiqué en haut du relevé devient « Sur le compte », s'il est plus récent.
+      if (parsed.balance && (!state.balance || parsed.balance.date >= state.balance.date)) pendingBalance = parsed.balance;
+
       const dates = pendingImport.map(r => r.date).sort();
-      const d = s => new Date(`${s}T12:00:00`).toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
-      const extra = [dup && `${dup} déjà présente${dup > 1 ? "s" : ""}`, internal && `${internal} virement${internal > 1 ? "s" : ""} d’épargne ignoré${internal > 1 ? "s" : ""}`].filter(Boolean).join(" · ");
-      $("import-text").innerHTML = pendingImport.length
-        ? `<b>${pendingImport.length} opération${pendingImport.length > 1 ? "s" : ""}</b> du ${d(dates[0])} au ${d(dates.at(-1))}${extra ? `<br><span>${extra}</span>` : ""}`
-        : `Tout est déjà là.${extra ? `<br><span>${extra}</span>` : ""}`;
-      $("import-confirm").hidden = !pendingImport.length;
+      const d = s => new Date(`${s}T12:00:00`).toLocaleDateString("fr-FR", { day: "numeric", month: "short", year: "numeric" });
+      const info = [];
+      if (parsed.account) info.push(`<b>${esc(parsed.account)}</b> → ${where}`);
+      info.push(pendingImport.length ? `<b>${pendingImport.length} opération${pendingImport.length > 1 ? "s" : ""}</b> du ${d(dates[0])} au ${d(dates.at(-1))}` : "Toutes les opérations sont déjà là.");
+      if (pendingBalance) info.push(`Sur le compte : <b>${fmt(pendingBalance.amount)}</b> au ${d(pendingBalance.date)}`);
+      const extra = [dup && `${dup} déjà présente${dup > 1 ? "s" : ""}`, internal && `${internal} mouvement${internal > 1 ? "s" : ""} d’épargne ou de prêt ignoré${internal > 1 ? "s" : ""}`].filter(Boolean).join(" · ");
+      if (extra) info.push(`<span>${extra}</span>`);
+      $("import-text").innerHTML = info.join("<br>");
+      $("import-confirm").hidden = !pendingImport.length && !pendingBalance;
       open("import-backdrop");
     });
     $("import-confirm").addEventListener("click", () => {
       state.ops.push(...pendingImport);
-      const last = pendingImport.map(r => r.date).sort().at(-1);
-      toast(`${pendingImport.length} ajoutée${pendingImport.length > 1 ? "s" : ""}`);
-      pendingImport = [];
+      if (pendingBalance) state.balance = { amount: pendingBalance.amount, date: pendingBalance.date, at: Date.now() };
+      toast(pendingImport.length ? `${pendingImport.length} ajoutée${pendingImport.length > 1 ? "s" : ""}` : "Solde mis à jour");
+      pendingImport = []; pendingBalance = null;
       save();
       close("import-backdrop");
-      if (last) month = periodKeyOf(last);
+      close("settings-backdrop");
+      month = currentKey();
       render();
     });
 
