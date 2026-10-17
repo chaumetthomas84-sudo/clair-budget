@@ -24,6 +24,7 @@
       --soft: #efefec;
       --plus: #2f8f5b;
       --minus: #c2463d;
+      --warn: #b86e0a;
       --accent: #1b1c1e;
       --on-accent: #ffffff;
     }
@@ -37,6 +38,7 @@
         --soft: #232529;
         --plus: #6cc58f;
         --minus: #ef7b72;
+        --warn: #e8a54b;
         --accent: #ececec;
         --on-accent: #111214;
       }
@@ -86,6 +88,7 @@
     /* Liste */
     .day { margin-top: 18px; }
     .day-head { display: flex; justify-content: space-between; padding: 0 4px 6px; color: var(--muted); font-size: 13px; }
+    .day-head span:first-child { color: var(--ink); font-weight: 600; }
     .day-head span:first-child::first-letter { text-transform: uppercase; }
     .rows { overflow: hidden; border-radius: 14px; background: var(--surface); }
     .row { display: flex; width: 100%; align-items: center; gap: 12px; padding: 12px 14px; border: 0; border-top: 1px solid var(--line); background: transparent; text-align: left; }
@@ -96,7 +99,10 @@
     .row-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .row-sub { color: var(--muted); font-size: 13px; }
     .row-amount { font-variant-numeric: tabular-nums; white-space: nowrap; }
-    .row-amount.plus { color: var(--plus); }
+    .row-amount.plus { color: var(--plus); font-weight: 650; }
+    .row-amount.big { font-weight: 650; }
+    .row.later { opacity: .5; }
+    .tag { display: inline-block; margin-left: 6px; padding: 1px 6px; border-radius: 6px; background: var(--soft); color: var(--muted); font-size: 11px; vertical-align: 2px; }
     .empty { padding: 48px 0; color: var(--muted); text-align: center; }
 
     .fab { position: fixed; right: max(20px, calc(50% - 240px)); bottom: calc(22px + env(safe-area-inset-bottom)); display: grid; width: 60px; height: 60px; place-items: center; border: 0; border-radius: 50%; background: var(--accent); color: var(--on-accent); font-size: 30px; line-height: 1; box-shadow: 0 6px 20px rgb(0 0 0 / 18%); }
@@ -131,15 +137,23 @@
     .add-line { width: 100%; margin-top: 10px; padding: 14px; border: 1px dashed var(--line); border-radius: 14px; background: transparent; color: var(--muted); }
     .label-row { display: flex; gap: 8px; }
     .label-row .field:last-child { flex: 0 0 96px; text-align: center; }
-    .plan { overflow: hidden; margin-top: 16px; border-radius: 14px; background: var(--surface); }
-    .plan-row { display: flex; width: 100%; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 14px; border: 0; border-top: 1px solid var(--line); background: transparent; text-align: left; }
-    .plan-row:first-child { border-top: 0; }
-    button.plan-row:active { background: var(--soft); }
-    .plan-row > span { font-size: 15px; }
-    .plan-row small { display: block; color: var(--muted); font-size: 12px; }
-    .plan-row b { display: block; font-weight: 600; font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
-    .plan-row .value small { text-align: right; }
-    .plan-row .neg, .check.neg { color: var(--minus); }
+    .status { display: inline-flex; align-items: center; gap: 8px; margin-bottom: 14px; padding: 6px 12px; border-radius: 999px; background: var(--tint); color: var(--tone); font-size: 14px; font-weight: 600; }
+    .status::before { width: 8px; height: 8px; border-radius: 50%; background: currentColor; content: ""; }
+    .status[hidden] { display: none; }
+    .tone-ok { --tone: var(--plus); --tint: color-mix(in srgb, var(--plus) 14%, transparent); }
+    .tone-warn { --tone: var(--warn); --tint: color-mix(in srgb, var(--warn) 16%, transparent); }
+    .tone-bad { --tone: var(--minus); --tint: color-mix(in srgb, var(--minus) 14%, transparent); }
+    .tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 18px; }
+    .tile { display: flex; min-width: 0; flex-direction: column; gap: 2px; padding: 12px 14px; border: 0; border-radius: 14px; background: var(--surface); text-align: left; }
+    .tile:active { background: var(--soft); }
+    .tile span { color: var(--muted); font-size: 13px; }
+    .tile b { font-size: 19px; font-weight: 650; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .tile small { overflow: hidden; color: var(--muted); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+    .tiles > :last-child:nth-child(odd) { grid-column: 1 / -1; }
+    .tile.wide { grid-column: 1 / -1; flex-direction: row; align-items: center; justify-content: space-between; }
+    .tile.bad { background: color-mix(in srgb, var(--minus) 13%, var(--surface)); }
+    .tile.bad b, .tile.bad small { color: var(--minus); }
+    .check.neg { color: var(--minus); }
     .check { min-height: 20px; margin: -4px 0 6px; color: var(--muted); font-size: 14px; text-align: center; }
     .setting { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; padding: 12px 14px; border-radius: 14px; background: var(--surface); }
     .setting small { display: block; color: var(--muted); font-size: 12px; }
@@ -174,14 +188,15 @@
     </div>
 
     <section class="summary" aria-live="polite">
-      <div class="summary-label">Reste</div>
+      <div class="status" id="status" hidden></div>
+      <div class="summary-label" id="hero-label">Reste</div>
       <div class="summary-value" id="left"></div>
       <div class="summary-day" id="per-day"></div>
+      <div class="tiles" id="plan"></div>
       <div class="summary-line">
         <span>Entrées <b id="total-in"></b></span>
         <span>Sorties <b id="total-out"></b></span>
       </div>
-      <div class="plan" id="plan"></div>
     </section>
 
     <div class="cats" id="cats"></div>
@@ -335,6 +350,7 @@
       ["Loisirs", "🎈"], ["Santé", "💊"], ["Shopping", "🛍️"], ["Virement", "🔁"], ["Autre", "•"]
     ];
     const ICON = Object.fromEntries(CATS);
+    const HUE = { Entrée: 145, Courses: 145, Resto: 25, Transport: 210, Maison: 265, Loisirs: 320, Santé: 0, Shopping: 45 };
     const OLD_CAT = { Logement: "Maison", Restaurants: "Resto", Carburant: "Transport", Transport: "Transport", Courses: "Courses", Loisirs: "Loisirs", Santé: "Santé", Shopping: "Shopping", Abonnements: "Maison" };
 
     const $ = id => document.getElementById(id);
@@ -440,20 +456,9 @@
       const totalOut = sum(ops.filter(o => o.type === "expense"));
       const left = totalIn - totalOut;
 
-      $("left").textContent = fmtC(left);
-      $("left").classList.toggle("neg", left < 0);
       $("total-in").textContent = fmtC(totalIn);
       $("total-out").textContent = fmtC(totalOut);
-
-      // Sans solde vérifié, simple repère du mois ; avec, c'est la prévision jusqu'à la paie qui fait foi.
-      if (month === currentKey() && left > 0 && !state.balance) {
-        const daysLeft = M.daysBetween(today, end) + 1;
-        $("per-day").textContent = `${euroRound.format(Math.floor(left / daysLeft / 100))} par jour · ${daysLeft} j restants`;
-      } else {
-        $("per-day").textContent = "";
-      }
-
-      renderPlan();
+      renderHero(left, end);
 
       // Catégories
       const byCat = {};
@@ -483,11 +488,13 @@
           <div class="rows">${items.map(o => {
             const plus = o.type === "income";
             const title = o.label || (plus ? "Entrée" : o.cat || "Autre");
-            const sub = [o.label && !plus ? o.cat : "", o.fixedId ? "fixe" : ""].filter(Boolean).join(" · ");
-            return `<button class="row" type="button" data-id="${o.id}">
-              <span class="row-icon">${plus ? "↓" : ICON[o.cat] || "•"}</span>
-              <span class="row-text"><div class="row-label">${esc(title)}</div>${sub ? `<div class="row-sub">${esc(sub)}</div>` : ""}</span>
-              <span class="row-amount ${plus ? "plus" : ""}">${plus ? "+" : "−"}${fmt(o.amount)}</span>
+            const hue = plus ? HUE.Entrée : HUE[o.cat];
+            const tint = hue === undefined ? "" : ` style="background:hsl(${hue} 70% 50% / .16)"`;
+            const amountClass = plus ? "plus" : o.amount >= 100 ? "big" : "";
+            return `<button class="row${o.date > today ? " later" : ""}" type="button" data-id="${o.id}">
+              <span class="row-icon"${tint}>${plus ? "↓" : ICON[o.cat] || "•"}</span>
+              <span class="row-text"><div class="row-label">${esc(title)}${o.fixedId ? '<span class="tag">fixe</span>' : ""}</div></span>
+              <span class="row-amount ${amountClass}">${plus ? "+" : "−"}${fmt(o.amount)}</span>
             </button>`;
           }).join("")}</div>
         </div>`;
@@ -686,34 +693,47 @@
     const getForecast = () => M.forecast(state, today, { reserve: reserve() });
     const shortDate = iso => new Date(`${iso}T12:00:00`).toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
     const dayName = iso => iso === today ? "aujourd’hui" : iso === M.addDays(today, 1) ? "demain" : `le ${shortDate(iso)}`;
-    const planRow = (label, value, opts = {}) =>
-      `<${opts.button ? 'button type="button" id="' + opts.button + '"' : "div"} class="plan-row"><span>${label}${opts.sub ? `<small>${opts.sub}</small>` : ""}</span>` +
-      `<span class="value"><b class="${opts.neg ? "neg" : ""}">${value}</b>${opts.valueSub ? `<small class="${opts.neg ? "neg" : ""}">${opts.valueSub}</small>` : ""}</span></${opts.button ? "button" : "div"}>`;
+    const tile = (label, value, opts = {}) =>
+      `<${opts.id ? `button type="button" id="${opts.id}"` : "div"} class="tile${opts.bad ? " bad" : ""}${opts.wide ? " wide" : ""}">` +
+      `<span>${label}${opts.wide && opts.sub ? `<small>${opts.sub}</small>` : ""}</span><b>${value}</b>${!opts.wide && opts.sub ? `<small>${opts.sub}</small>` : ""}` +
+      `</${opts.id ? "button" : "div"}>`;
+    function setStatus(tone, text) {
+      const el = $("status");
+      el.hidden = !tone;
+      el.className = `status${tone ? " tone-" + tone : ""}`;
+      el.textContent = text || "";
+    }
 
-    function renderPlan() {
+    function renderHero(left, end) {
       const fc = getForecast();
-      if (fc.balance === null) {
-        $("plan").innerHTML = planRow("Sur le compte", "Indiquer ›", { button: "balance", sub: "Pour voir jusqu’à ta paie" });
-        return;
+      const live = month === currentKey() && fc.available !== null;
+      const tiles = [];
+      if (live) {
+        $("hero-label").textContent = fc.pay ? "Pour vivre jusqu’à la paie" : `Pour vivre jusqu’au ${shortDate(fc.end)}`;
+        $("left").textContent = fmtC(Math.max(0, fc.available));
+        $("left").classList.toggle("neg", fc.available <= 0);
+        $("per-day").textContent = fc.available > 0 ? `${fmtC(floorEuro(fc.perDay))} par jour · ${fc.days} jours` : `Il manque ${fmtC(-fc.available)}`;
+        if (fc.overdraft) setStatus("bad", `Découvert prévu ${dayName(fc.overdraft.date)}`);
+        else if (fc.available <= 0) setStatus("bad", "Budget dépassé");
+        else if (fc.spendingPerDay !== null && fc.perDay < fc.spendingPerDay) setStatus("warn", "Serré");
+        else setStatus("ok", "Ça va");
+
+        const outs = fc.events.filter(e => e.cents < 0);
+        tiles.push(tile("Sur le compte", fmtC(fc.balance), { id: "balance", bad: fc.balance < 0, sub: `vérifié ${dayName(state.balance.date)}` }));
+        tiles.push(tile("À payer", fmtC(fc.toPay), { sub: outs.length ? `${esc(outs[0].label || "dépense")} ${dayName(outs[0].date)}` : "rien d’ici la paie" }));
+        if (fc.overdraft && fc.overdraft.date !== today) tiles.push(tile("Découvert", fmtC(fc.overdraft.cents), { bad: true, sub: `${dayName(fc.overdraft.date)}${fc.overdraft.label ? " · " + esc(fc.overdraft.label) : ""}` }));
+        else if (!fc.overdraft && outs.length) tiles.push(tile("Point bas", fmtC(fc.low.cents), { sub: dayName(fc.low.date) }));
+        if (fc.savings > 0) tiles.push(tile("Épargne possible", `≈ ${fmtC(fc.savings)}`, { sub: "selon tes habitudes" }));
+      } else {
+        $("hero-label").textContent = "Reste";
+        $("left").textContent = fmtC(left);
+        $("left").classList.toggle("neg", left < 0);
+        const daysLeft = M.daysBetween(today, end) + 1;
+        $("per-day").textContent = month === currentKey() && left > 0 ? `${euroRound.format(Math.floor(left / daysLeft / 100))} par jour · ${daysLeft} jours` : "";
+        setStatus("");
+        if (month === currentKey()) tiles.push(tile("Sur le compte", "Indiquer ›", { id: "balance", wide: true, sub: "pour voir jusqu’à ta paie" }));
       }
-      const rows = [planRow("Sur le compte", fmtC(fc.balance), { button: "balance", neg: fc.balance < 0, sub: `vérifié ${dayName(state.balance.date)}` })];
-
-      const until = fc.pay ? `Jusqu’à la paie · ${fc.days} j` : `Jusqu’à la fin du mois · ${fc.days} j`;
-      const untilSub = [fc.pay ? `${fc.pay.label} ${dayName(fc.pay.date)}` : "", fc.reserve ? `réserve ${fmtC(fc.reserve)} gardée` : ""].filter(Boolean).join(" · ");
-      rows.push(fc.available > 0
-        ? planRow(until, `${fmtC(fc.available)} pour vivre`, { sub: untilSub, valueSub: `${fmtC(floorEuro(fc.perDay))} par jour` })
-        : planRow(until, "0 € pour vivre", { sub: untilSub, neg: true, valueSub: `il manque ${fmtC(-fc.available)}` }));
-
-      const outs = fc.events.filter(e => e.cents < 0);
-      if (outs.length) rows.push(planRow("À payer d’ici là", fmtC(fc.toPay), { sub: `prochain : ${esc(outs[0].label || "dépense")} ${dayName(outs[0].date)}` }));
-
-      if (fc.overdraft) {
-        rows.push(planRow("Découvert prévu", fmtC(fc.overdraft.cents), { neg: true, sub: `${dayName(fc.overdraft.date)}${fc.overdraft.label ? " · après " + esc(fc.overdraft.label) : ""}` }));
-      } else if (outs.length) {
-        rows.push(planRow("Point le plus bas", fmtC(fc.low.cents), { sub: `${dayName(fc.low.date)}, avant tes dépenses courantes` }));
-      }
-      if (fc.savings > 0) rows.push(planRow("Épargne possible", `≈ ${fmtC(fc.savings)}`, { sub: "estimée sur tes dépenses habituelles" }));
-      $("plan").innerHTML = rows.join("");
+      $("plan").innerHTML = tiles.join("");
     }
     $("plan").addEventListener("click", e => {
       if (!e.target.closest("#balance")) return;
