@@ -1041,9 +1041,28 @@
     render();
     navigator.storage?.persist?.().catch(() => {});
 
+    // Mises à jour : on vérifie à l'ouverture et à chaque retour dans l'appli ; une nouvelle version recharge la page.
     if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
-      navigator.serviceWorker.register("./service-worker.js").catch(() => {});
+      const hadController = !!navigator.serviceWorker.controller;
+      let reloading = false;
+      navigator.serviceWorker.addEventListener("controllerchange", () => {
+        if (!hadController || reloading) return;
+        reloading = true;
+        location.reload();
+      });
+      navigator.serviceWorker.register("./service-worker.js", { updateViaCache: "none" })
+        .then(reg => {
+          reg.update().catch(() => {});
+          document.addEventListener("visibilitychange", () => {
+            if (document.visibilityState === "visible") reg.update().catch(() => {});
+          });
+        })
+        .catch(() => {});
     }
+    // Appli restée ouverte en arrière-plan : au retour un autre jour, on repart sur la bonne date.
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible" && isoDay(new Date()) !== today) location.reload();
+    });
   })();
   </script>
 </body>
