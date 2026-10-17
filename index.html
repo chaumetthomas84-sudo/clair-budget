@@ -323,7 +323,7 @@
         <button class="row" type="button" id="backup"><span class="row-text">Sauvegarder mes données<div class="row-sub" id="backup-info"></div></span><span class="row-sub">›</span></button>
         <button class="row" type="button" id="restore"><span class="row-text">Restaurer une sauvegarde<div class="row-sub">ou ajouter un fichier de dépenses fixes</div></span><span class="row-sub">›</span></button>
       </div>
-      <p class="hint" style="text-align:center">Version 34</p>
+      <p class="hint" style="text-align:center">Version 35</p>
       <p class="hint">Tes données sont uniquement dans ce navigateur, sur cet appareil. Rien n’est envoyé ailleurs. Sauvegarde de temps en temps pour ne rien perdre.</p>
     </div>
   </div>
@@ -902,7 +902,8 @@
           if (!fixes.length) throw new Error();
           pendingFixes = { space: target, fixes };
           const total = fixes.filter(f => f.type === "expense").reduce((t, f) => t + M.cents(f.amount), 0);
-          $("restore-text").innerHTML = `<b>${fixes.length} dépenses fixes</b> pour le compte <b>${SPACE_NAMES[target]}</b><br>≈ ${fmtC(total)} par mois<br><span>Elles s’ajoutent à ce qui existe déjà : rien n’est effacé.</span>`;
+          const totalIn = fixes.filter(f => f.type === "income").reduce((t, f) => t + M.cents(f.amount), 0);
+          $("restore-text").innerHTML = `<b>${fixes.length} fixes</b> pour le compte <b>${SPACE_NAMES[target]}</b><br>Sorties ≈ ${fmtC(total)} par mois${totalIn ? ` · entrées ≈ ${fmtC(totalIn)}` : ""}<br><span>Elles s’ajoutent à ce qui existe déjà : rien n’est effacé.</span>`;
           $("restore-confirm").textContent = "Ajouter";
           open("restore-backdrop");
           return;
