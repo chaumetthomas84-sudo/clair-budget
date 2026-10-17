@@ -321,9 +321,9 @@
       <div class="rows menu">
         <button class="row" type="button" id="open-import"><span class="row-text">Importer un relevé de la banque</span><span class="row-sub">CSV</span></button>
         <button class="row" type="button" id="backup"><span class="row-text">Sauvegarder mes données<div class="row-sub" id="backup-info"></div></span><span class="row-sub">›</span></button>
-        <button class="row" type="button" id="restore"><span class="row-text">Restaurer une sauvegarde</span><span class="row-sub">›</span></button>
+        <button class="row" type="button" id="restore"><span class="row-text">Restaurer une sauvegarde<div class="row-sub">ou ajouter un fichier de dépenses fixes</div></span><span class="row-sub">›</span></button>
       </div>
-      <p class="hint" style="text-align:center">Version 33</p>
+      <p class="hint" style="text-align:center">Version 34</p>
       <p class="hint">Tes données sont uniquement dans ce navigateur, sur cet appareil. Rien n’est envoyé ailleurs. Sauvegarde de temps en temps pour ne rien perdre.</p>
     </div>
   </div>
@@ -442,6 +442,9 @@
     let filter = "";
     let showAll = false;
 
+    const words = t => new Set(String(t).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").split(/[^a-z]+/).filter(w => w.length >= 4));
+    const sameWord = (a, b) => { const wa = words(a); return [...words(b)].some(w => wa.has(w)); };
+
     // Les fixes sont posés automatiquement sur chaque mois, jusqu'à la fin du mois budgétaire en cours.
     function applyFixed(m) {
       if (m > periodOf(currentKey()).end.slice(0, 7)) return false;
@@ -450,6 +453,12 @@
         if (f.from > m || state.skipped.includes(`${f.id}|${m}`)) continue;
         if (state.ops.some(o => o.fixedId === f.id && o.date.startsWith(m))) continue;
         const day = Math.min(f.day || 1, daysIn(m));
+        const target = new Date(`${m}-${pad(day)}T12:00:00`).getTime();
+        const twin = state.ops.find(o => !o.fixedId && o.type === f.type && o.date.startsWith(m) &&
+          Math.abs(new Date(`${o.date}T12:00:00`).getTime() - target) <= 6 * 864e5 &&
+          (Math.abs(o.amount - f.amount) <= Math.max(0.01, f.amount * 0.01) ||
+           (Math.abs(o.amount - f.amount) <= f.amount * 0.15 && sameWord(o.label, f.label))));
+        if (twin) { twin.fixedId = f.id; changed = true; continue; }
         state.ops.push({ id: uid(), date: `${m}-${pad(day)}`, type: f.type, amount: f.amount, label: f.label, cat: f.type === "income" ? "" : f.cat || "Autre", fixedId: f.id });
         changed = true;
       }
@@ -877,7 +886,7 @@
     });
 
     const SPACE_NAMES = { perso: "Perso", commun: "Commun" };
-    let pendingRestore = null;
+    let pendingRestore = null, pendingFixes = null;
     $("restore").addEventListener("click", () => $("restore-file").click());
     $("restore-file").addEventListener("change", async e => {
       const file = e.target.files[0];
@@ -885,6 +894,20 @@
       if (!file) return;
       try {
         const parsed = JSON.parse(await file.text());
+        pendingFixes = null;
+        if (parsed?.kind === "fixes" && Array.isArray(parsed.fixes)) {
+          const target = SPACES[parsed.space] ? parsed.space : space;
+          const fixes = parsed.fixes.filter(f => f && f.label && Number(f.amount) > 0)
+            .map(f => ({ type: f.type === "income" ? "income" : "expense", label: String(f.label).slice(0, 60), amount: Math.round(Number(f.amount) * 100) / 100, day: Math.min(31, Math.max(1, parseInt(f.day, 10) || 1)), cat: f.type === "income" ? "" : (ICON[f.cat] ? f.cat : "Autre") }));
+          if (!fixes.length) throw new Error();
+          pendingFixes = { space: target, fixes };
+          const total = fixes.filter(f => f.type === "expense").reduce((t, f) => t + M.cents(f.amount), 0);
+          $("restore-text").innerHTML = `<b>${fixes.length} dépenses fixes</b> pour le compte <b>${SPACE_NAMES[target]}</b><br>≈ ${fmtC(total)} par mois<br><span>Elles s’ajoutent à ce qui existe déjà : rien n’est effacé.</span>`;
+          $("restore-confirm").textContent = "Ajouter";
+          open("restore-backdrop");
+          return;
+        }
+        $("restore-confirm").textContent = "Remplacer mes données";
         // Sauvegarde des deux comptes, ou ancienne sauvegarde d'un seul compte (restaurée dans le compte ouvert).
         const spaces = parsed?.spaces && Object.keys(SPACES).every(sp => isState(parsed.spaces[sp])) ? parsed.spaces
           : isState(parsed?.data ?? parsed) ? { [space]: parsed.data ?? parsed } : null;
@@ -899,6 +922,40 @@
       }
     });
     $("restore-confirm").addEventListener("click", () => {
+      if (pendingFixes) {
+        const { space: target, fixes } = pendingFixes;
+        pendingFixes = null;
+        if (target !== space) {
+          save();
+          space = target;
+          try { localStorage.setItem(SPACE_KEY, space); } catch {}
+          state = load(space);
+        }
+        const known = new Set(state.fixed.map(f => norm(f.label)));
+        const newIds = new Set();
+        for (const f of fixes) {
+          if (known.has(norm(f.label))) continue;
+          const id = uid();
+          newIds.add(id);
+          state.fixed.push({ id, from: thisMonth, ...f });
+        }
+        const added = newIds.size;
+        applyAllFixed();
+        const pastLimit = state.balance?.date > today ? state.balance.date : today;
+        state.ops = state.ops.filter(o => {
+          if (!newIds.has(o.fixedId) || o.imported || o.date >= pastLimit) return true;
+          state.skipped.push(`${o.fixedId}|${o.date.slice(0, 7)}`);
+          return false;
+        });
+        save();
+        close("restore-backdrop");
+        close("settings-backdrop");
+        spaceSwitch(space);
+        month = currentKey();
+        render();
+        toast(added ? `${added} fixes ajoutés` : "Déjà tous présents");
+        return;
+      }
       if (!pendingRestore) return;
       // Les données remplacées restent gardées à part, au cas où.
       save();
