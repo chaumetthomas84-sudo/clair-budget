@@ -69,13 +69,20 @@
     /* Reste */
     .spaces { width: fit-content; margin-top: 8px; }
     .spaces button { padding: 6px 16px; font-size: 14px; }
-    .summary { padding: 20px 4px 22px; }
+    .summary { padding: 14px 0 4px; }
+    .hero { padding: 18px 18px 20px; border: 1px solid var(--line); border-radius: 22px; background: var(--surface); }
+    .hero.tone-ok, .hero.tone-warn, .hero.tone-bad { border-color: color-mix(in srgb, var(--tone) 35%, transparent); background: color-mix(in srgb, var(--tone) 9%, var(--surface)); }
+    .hero .status { background: color-mix(in srgb, var(--tone) 18%, transparent); }
+    .flow { display: grid; grid-template-columns: 1fr 1fr; margin-top: 8px; overflow: hidden; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
+    .flow div { display: flex; flex-direction: column; gap: 2px; padding: 10px 14px; }
+    .flow div + div { border-left: 1px solid var(--line); }
+    .flow span { color: var(--muted); font-size: 13px; }
+    .flow b { font-size: 17px; font-weight: 650; font-variant-numeric: tabular-nums; }
+    .flow b.in { color: var(--plus); }
     .summary-label { color: var(--muted); font-size: 14px; }
     .summary-value { margin-top: 2px; font-size: 44px; font-weight: 650; letter-spacing: -1.5px; font-variant-numeric: tabular-nums; }
     .summary-value.neg { color: var(--minus); }
     .summary-day { margin-top: 2px; font-size: 15px; }
-    .summary-line { display: flex; gap: 18px; margin-top: 14px; color: var(--muted); font-size: 14px; font-variant-numeric: tabular-nums; }
-    .summary-line b { color: var(--ink); font-weight: 600; }
 
     /* Catégories */
 
@@ -84,7 +91,7 @@
     .day-head { display: flex; justify-content: space-between; padding: 0 4px 6px; color: var(--muted); font-size: 13px; }
     .day-head span:first-child { color: var(--ink); font-weight: 600; }
     .day-head span:first-child::first-letter { text-transform: uppercase; }
-    .rows { overflow: hidden; border-radius: 14px; background: var(--surface); }
+    .rows { overflow: hidden; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
     .row { display: flex; width: 100%; align-items: center; gap: 12px; padding: 12px 14px; border: 0; border-top: 1px solid var(--line); background: transparent; text-align: left; }
     .row:first-child { border-top: 0; }
     .row:active { background: var(--soft); }
@@ -101,7 +108,7 @@
     .block-title { display: flex; justify-content: space-between; margin: 26px 4px 8px; color: var(--muted); font-size: 13px; font-weight: 600; letter-spacing: .4px; text-transform: uppercase; }
     .block-title[hidden], .bars:empty { display: none; }
     .block-title button { border: 0; background: transparent; color: var(--ink); font: inherit; text-transform: none; letter-spacing: 0; }
-    .bars { overflow: hidden; border-radius: 14px; background: var(--surface); }
+    .bars { overflow: hidden; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
     .bar { display: grid; grid-template-columns: 34px 1fr auto; gap: 6px 12px; align-items: center; width: 100%; padding: 11px 14px; border: 0; border-top: 1px solid var(--line); background: transparent; text-align: left; }
     .bar:first-child { border-top: 0; }
     .bar:active, .bar[aria-pressed="true"] { background: var(--soft); }
@@ -152,15 +159,15 @@
     .tone-ok { --tone: var(--plus); --tint: color-mix(in srgb, var(--plus) 14%, transparent); }
     .tone-warn { --tone: var(--warn); --tint: color-mix(in srgb, var(--warn) 16%, transparent); }
     .tone-bad { --tone: var(--minus); --tint: color-mix(in srgb, var(--minus) 14%, transparent); }
-    .tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 18px; }
-    .tile { display: flex; min-width: 0; flex-direction: column; gap: 2px; padding: 12px 14px; border: 0; border-radius: 14px; background: var(--surface); text-align: left; }
+    .tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+    .tile { display: flex; min-width: 0; flex-direction: column; gap: 2px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); text-align: left; }
     .tile:active { background: var(--soft); }
     .tile span { color: var(--muted); font-size: 13px; }
     .tile b { font-size: 19px; font-weight: 650; font-variant-numeric: tabular-nums; white-space: nowrap; }
     .tile small { overflow: hidden; color: var(--muted); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
     .tiles > :last-child:nth-child(odd) { grid-column: 1 / -1; }
     .tile.wide { grid-column: 1 / -1; flex-direction: row; align-items: center; justify-content: space-between; }
-    .tile.bad { background: color-mix(in srgb, var(--minus) 13%, var(--surface)); }
+    .tile.bad { border-color: color-mix(in srgb, var(--minus) 40%, transparent); background: color-mix(in srgb, var(--minus) 11%, var(--surface)); }
     .tile.bad b, .tile.bad small { color: var(--minus); }
     .check.neg { color: var(--minus); }
     .check { min-height: 20px; margin: -4px 0 6px; color: var(--muted); font-size: 14px; text-align: center; }
@@ -197,14 +204,16 @@
     </div>
 
     <section class="summary" aria-live="polite">
-      <div class="status" id="status" hidden></div>
-      <div class="summary-label" id="hero-label">Reste</div>
-      <div class="summary-value" id="left"></div>
-      <div class="summary-day" id="per-day"></div>
+      <div class="hero" id="hero">
+        <div class="status" id="status" hidden></div>
+        <div class="summary-label" id="hero-label">Reste</div>
+        <div class="summary-value" id="left"></div>
+        <div class="summary-day" id="per-day"></div>
+      </div>
       <div class="tiles" id="plan"></div>
-      <div class="summary-line">
-        <span>Entrées <b id="total-in"></b></span>
-        <span>Sorties <b id="total-out"></b></span>
+      <div class="flow">
+        <div><span>↓ Entrées</span><b class="in" id="total-in"></b></div>
+        <div><span>↑ Sorties</span><b id="total-out"></b></div>
       </div>
     </section>
 
@@ -314,7 +323,7 @@
         <button class="row" type="button" id="backup"><span class="row-text">Sauvegarder mes données<div class="row-sub" id="backup-info"></div></span><span class="row-sub">›</span></button>
         <button class="row" type="button" id="restore"><span class="row-text">Restaurer une sauvegarde</span><span class="row-sub">›</span></button>
       </div>
-      <p class="hint" style="text-align:center">Version 32</p>
+      <p class="hint" style="text-align:center">Version 33</p>
       <p class="hint">Tes données sont uniquement dans ce navigateur, sur cet appareil. Rien n’est envoyé ailleurs. Sauvegarde de temps en temps pour ne rien perdre.</p>
     </div>
   </div>
@@ -753,6 +762,7 @@
       const el = $("status");
       el.hidden = !tone;
       el.className = `status${tone ? " tone-" + tone : ""}`;
+      $("hero").className = `hero${tone ? " tone-" + tone : ""}`;
       el.textContent = text || "";
     }
 
@@ -771,11 +781,11 @@
         else setStatus("ok", "Ça va");
 
         const outs = fc.events.filter(e => e.cents < 0);
-        tiles.push(tile("Sur le compte", fmtC(fc.balance), { id: "balance", bad: fc.balance < 0, sub: `vérifié ${dayName(state.balance.date)}` }));
-        tiles.push(tile("À payer", fmtC(fc.toPay), { sub: outs.length ? `${esc(outs[0].label || "dépense")} ${dayName(outs[0].date)}` : "rien d’ici la paie" }));
-        if (fc.overdraft && fc.overdraft.date !== today) tiles.push(tile("Découvert", fmtC(fc.overdraft.cents), { bad: true, sub: `${dayName(fc.overdraft.date)}${fc.overdraft.label ? " · " + esc(fc.overdraft.label) : ""}` }));
-        else if (!fc.overdraft && outs.length) tiles.push(tile("Point bas", fmtC(fc.low.cents), { sub: dayName(fc.low.date) }));
-        if (fc.savings > 0) tiles.push(tile("Épargne possible", `≈ ${fmtC(fc.savings)}`, { sub: "selon tes habitudes" }));
+        tiles.push(tile("🏦 Sur le compte", fmtC(fc.balance), { id: "balance", bad: fc.balance < 0, sub: `vérifié ${dayName(state.balance.date)}` }));
+        tiles.push(tile("📅 À payer", fmtC(fc.toPay), { sub: outs.length ? `${esc(outs[0].label || "dépense")} ${dayName(outs[0].date)}` : "rien d’ici la paie" }));
+        if (fc.overdraft && fc.overdraft.date !== today) tiles.push(tile("⚠️ Découvert", fmtC(fc.overdraft.cents), { bad: true, sub: `${dayName(fc.overdraft.date)}${fc.overdraft.label ? " · " + esc(fc.overdraft.label) : ""}` }));
+        else if (!fc.overdraft && outs.length) tiles.push(tile("📉 Point bas", fmtC(fc.low.cents), { sub: dayName(fc.low.date) }));
+        if (fc.savings > 0) tiles.push(tile("🐷 Épargne possible", `≈ ${fmtC(fc.savings)}`, { sub: "selon tes habitudes" }));
       } else {
         $("hero-label").textContent = "Reste";
         $("left").textContent = fmtC(left);
@@ -783,7 +793,7 @@
         const daysLeft = M.daysBetween(today, end) + 1;
         $("per-day").textContent = month === currentKey() && left > 0 ? `${euroRound.format(Math.floor(left / daysLeft / 100))} par jour · ${daysLeft} jours` : "";
         setStatus("");
-        if (month === currentKey()) tiles.push(tile("Sur le compte", "Indiquer ›", { id: "balance", wide: true, sub: "pour voir jusqu’à ta paie" }));
+        if (month === currentKey()) tiles.push(tile("🏦 Sur le compte", "Indiquer ›", { id: "balance", wide: true, sub: "pour voir jusqu’à ta paie" }));
       }
       $("plan").innerHTML = tiles.join("");
     }
