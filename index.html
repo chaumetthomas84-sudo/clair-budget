@@ -78,12 +78,6 @@
     .summary-line b { color: var(--ink); font-weight: 600; }
 
     /* Catégories */
-    .cats { display: flex; gap: 8px; margin: 0 -16px 8px; padding: 0 16px 4px; overflow-x: auto; scrollbar-width: none; }
-    .cats::-webkit-scrollbar { display: none; }
-    .cat-chip { flex: 0 0 auto; display: flex; align-items: center; gap: 6px; padding: 7px 12px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); font-size: 14px; white-space: nowrap; }
-    .cat-chip span { color: var(--muted); font-variant-numeric: tabular-nums; }
-    .cat-chip[aria-pressed="true"] { border-color: var(--accent); background: var(--accent); color: var(--on-accent); }
-    .cat-chip[aria-pressed="true"] span { color: inherit; opacity: .75; }
 
     /* Liste */
     .day { margin-top: 18px; }
@@ -104,6 +98,21 @@
     .row.later { opacity: .5; }
     .tag { display: inline-block; margin-left: 6px; padding: 1px 6px; border-radius: 6px; background: var(--soft); color: var(--muted); font-size: 11px; vertical-align: 2px; }
     .empty { padding: 48px 0; color: var(--muted); text-align: center; }
+    .block-title { display: flex; justify-content: space-between; margin: 26px 4px 8px; color: var(--muted); font-size: 13px; font-weight: 600; letter-spacing: .4px; text-transform: uppercase; }
+    .block-title[hidden], .bars:empty { display: none; }
+    .block-title button { border: 0; background: transparent; color: var(--ink); font: inherit; text-transform: none; letter-spacing: 0; }
+    .bars { overflow: hidden; border-radius: 14px; background: var(--surface); }
+    .bar { display: grid; grid-template-columns: 34px 1fr auto; gap: 6px 12px; align-items: center; width: 100%; padding: 11px 14px; border: 0; border-top: 1px solid var(--line); background: transparent; text-align: left; }
+    .bar:first-child { border-top: 0; }
+    .bar:active, .bar[aria-pressed="true"] { background: var(--soft); }
+    .bar .row-icon { grid-row: 1 / 3; }
+    .bar-name { font-weight: 600; }
+    .bar-amount { font-weight: 650; font-variant-numeric: tabular-nums; }
+    .bar-track { grid-column: 2 / -1; height: 6px; overflow: hidden; border-radius: 3px; background: var(--soft); }
+    .bar-fill { display: block; height: 100%; border-radius: 3px; background: var(--muted); }
+    .row-label { font-weight: 500; }
+    .row-sub { font-size: 12px; }
+    .row-amount { font-size: 16px; }
 
     .fab { position: fixed; right: max(20px, calc(50% - 240px)); bottom: calc(22px + env(safe-area-inset-bottom)); display: grid; width: 60px; height: 60px; place-items: center; border: 0; border-radius: 50%; background: var(--accent); color: var(--on-accent); font-size: 30px; line-height: 1; box-shadow: 0 6px 20px rgb(0 0 0 / 18%); }
 
@@ -199,8 +208,11 @@
       </div>
     </section>
 
-    <div class="cats" id="cats"></div>
+    <div class="block-title" id="cats-title">Où part l’argent</div>
+    <div class="bars" id="cats"></div>
+    <div class="block-title" id="list-title">Dernières opérations</div>
     <div id="list"></div>
+    <button class="add-line" type="button" id="more" hidden></button>
   </main>
 
   <button class="fab" id="add" type="button" aria-label="Ajouter">+</button>
@@ -418,6 +430,7 @@
     const currentKey = () => periodKeyOf(today);
     let month = currentKey();
     let filter = "";
+    let showAll = false;
 
     // Les fixes sont posés automatiquement sur chaque mois, jusqu'à la fin du mois budgétaire en cours.
     function applyFixed(m) {
@@ -460,43 +473,70 @@
       $("total-out").textContent = fmtC(totalOut);
       renderHero(left, end);
 
-      // Catégories
+      // Où part l'argent : une barre par catégorie, de la plus grosse à la plus petite.
       const byCat = {};
-      for (const o of ops) if (o.type === "expense") byCat[o.cat || "Autre"] = (byCat[o.cat || "Autre"] || 0) + o.amount;
-      const catList = Object.entries(byCat).sort((a, b) => b[1] - a[1]);
+      for (const o of ops) if (o.type === "expense") byCat[o.cat || "Autre"] = (byCat[o.cat || "Autre"] || 0) + M.cents(o.amount);
+      // Les virements (vers d'autres comptes, prêts…) vont en dernier et ne servent pas d'échelle.
+      const catList = Object.entries(byCat).sort((a, b) => (a[0] === "Virement") - (b[0] === "Virement") || b[1] - a[1]);
       if (filter && !byCat[filter]) filter = "";
-      $("cats").innerHTML = catList.length > 1 ? catList.map(([c, v]) =>
-        `<button class="cat-chip" type="button" data-cat="${esc(c)}" aria-pressed="${filter === c}">${ICON[c] || "•"} ${esc(c)} <span>${euroRound.format(v)}</span></button>`
-      ).join("") : "";
+      const top = Math.max(1, ...catList.filter(([c]) => c !== "Virement").map(([, v]) => v));
+      $("cats-title").hidden = catList.length < 2;
+      $("cats").innerHTML = catList.length < 2 ? "" : catList.map(([c, v]) => {
+        const hue = HUE[c];
+        const width = Math.min(100, Math.max(3, v / top * 100));
+        const fill = ` style="width:${width}%${hue === undefined ? "" : `;background:hsl(${hue} 65% 50%)`}"`;
+        const tint = hue === undefined ? "" : ` style="background:hsl(${hue} 70% 50% / .16)"`;
+        return `<button class="bar" type="button" data-cat="${esc(c)}" aria-pressed="${filter === c}">
+          <span class="row-icon"${tint}>${ICON[c] || "•"}</span>
+          <span class="bar-name">${esc(c)}</span><span class="bar-amount">${fmtC(v)}</span>
+          <span class="bar-track"><span class="bar-fill"${fill}></span></span>
+        </button>`;
+      }).join("");
 
-      // Liste par jour
-      const shown = ops.filter(o => !filter || (o.type === "expense" && (o.cat || "Autre") === filter))
+      // Opérations : les dernières, ou tout, ou une seule catégorie.
+      const all = ops.filter(o => !filter || (o.type === "expense" && (o.cat || "Autre") === filter))
         .sort((a, b) => b.date.localeCompare(a.date) || (b.created || 0) - (a.created || 0));
-      if (!shown.length) {
-        $("list").innerHTML = `<p class="empty">Rien ce mois-ci.</p>`;
+      const short = !filter && !showAll;
+      const shown = short ? all.filter(o => o.date <= today).slice(0, 8) : all;
+      $("list-title").innerHTML = filter
+        ? `<span>${esc(filter)}</span><button type="button" id="clear-filter">✕ Tout</button>`
+        : short ? "Dernières opérations" : "Toutes les opérations";
+      const more = $("more");
+      more.hidden = !!filter || all.length <= shown.length && short;
+      more.textContent = short ? `Tout voir (${all.length})` : "Réduire";
+      if (!all.length) {
+        $("list").innerHTML = `<p class="empty">Rien sur cette période.</p>`;
+        more.hidden = true;
+        return;
+      }
+      const yesterday = isoDay(new Date(Date.now() - 864e5));
+      const dayLabel = date => {
+        const d = new Date(`${date}T12:00:00`);
+        return date === today ? "aujourd’hui" : date === yesterday ? "hier" : d.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "short" });
+      };
+      const rowHtml = (o, withDate) => {
+        const plus = o.type === "income";
+        const title = o.label || (plus ? "Entrée" : o.cat || "Autre");
+        const hue = plus ? HUE.Entrée : HUE[o.cat];
+        const tint = hue === undefined ? "" : ` style="background:hsl(${hue} 70% 50% / .16)"`;
+        const amountClass = plus ? "plus" : o.amount >= 100 ? "big" : "";
+        return `<button class="row${o.date > today ? " later" : ""}" type="button" data-id="${o.id}">
+          <span class="row-icon"${tint}>${plus ? "↓" : ICON[o.cat] || "•"}</span>
+          <span class="row-text"><div class="row-label">${esc(title)}${o.fixedId ? '<span class="tag">fixe</span>' : ""}</div>${withDate ? `<div class="row-sub">${dayLabel(o.date)}</div>` : ""}</span>
+          <span class="row-amount ${amountClass}">${plus ? "+" : "−"}${fmt(o.amount)}</span>
+        </button>`;
+      };
+      if (short) {
+        $("list").innerHTML = `<div class="rows">${shown.map(o => rowHtml(o, true)).join("")}</div>`;
         return;
       }
       const groups = new Map();
       for (const o of shown) { if (!groups.has(o.date)) groups.set(o.date, []); groups.get(o.date).push(o); }
-      const yesterday = isoDay(new Date(Date.now() - 864e5));
       $("list").innerHTML = [...groups].map(([date, items]) => {
-        const d = new Date(`${date}T12:00:00`);
-        const name = date === today ? "aujourd’hui" : date === yesterday ? "hier" : d.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric" });
         const dayOut = items.filter(o => o.type === "expense").reduce((s, o) => s + o.amount, 0);
         return `<div class="day">
-          <div class="day-head"><span>${name}${date > today ? " · à venir" : ""}</span><span>${dayOut ? "−" + fmt(dayOut) : ""}</span></div>
-          <div class="rows">${items.map(o => {
-            const plus = o.type === "income";
-            const title = o.label || (plus ? "Entrée" : o.cat || "Autre");
-            const hue = plus ? HUE.Entrée : HUE[o.cat];
-            const tint = hue === undefined ? "" : ` style="background:hsl(${hue} 70% 50% / .16)"`;
-            const amountClass = plus ? "plus" : o.amount >= 100 ? "big" : "";
-            return `<button class="row${o.date > today ? " later" : ""}" type="button" data-id="${o.id}">
-              <span class="row-icon"${tint}>${plus ? "↓" : ICON[o.cat] || "•"}</span>
-              <span class="row-text"><div class="row-label">${esc(title)}${o.fixedId ? '<span class="tag">fixe</span>' : ""}</div></span>
-              <span class="row-amount ${amountClass}">${plus ? "+" : "−"}${fmt(o.amount)}</span>
-            </button>`;
-          }).join("")}</div>
+          <div class="day-head"><span>${dayLabel(date)}${date > today ? " · à venir" : ""}</span><span>${dayOut ? "−" + fmt(dayOut) : ""}</span></div>
+          <div class="rows">${items.map(o => rowHtml(o, false)).join("")}</div>
         </div>`;
       }).join("");
     }
@@ -668,8 +708,8 @@
     spaceSwitch(space);
 
     // ---------- Événements ----------
-    $("prev").addEventListener("click", () => { month = shiftMonth(month, -1); filter = ""; render(); });
-    $("next").addEventListener("click", () => { month = shiftMonth(month, 1); filter = ""; render(); });
+    $("prev").addEventListener("click", () => { month = shiftMonth(month, -1); filter = ""; showAll = false; render(); });
+    $("next").addEventListener("click", () => { month = shiftMonth(month, 1); filter = ""; showAll = false; render(); });
     $("add").addEventListener("click", () => openOp());
     $("open-fixed").addEventListener("click", () => { renderFixed(); open("fixed-backdrop"); });
     $("fixed-add").addEventListener("click", () => openFx());
@@ -686,6 +726,17 @@
       if (!b) return;
       filter = filter === b.dataset.cat ? "" : b.dataset.cat;
       render();
+      if (filter) $("list-title").scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+    $("list-title").addEventListener("click", e => {
+      if (!e.target.closest("#clear-filter")) return;
+      filter = "";
+      render();
+    });
+    $("more").addEventListener("click", () => {
+      showAll = !showAll;
+      render();
+      if (!showAll) $("list-title").scrollIntoView({ block: "start" });
     });
 
     // ---------- Solde et prévision ----------
